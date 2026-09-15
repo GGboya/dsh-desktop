@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -82,7 +83,7 @@ afterEach(() => {
 describe('desktop profile composition', {
   timeout: process.platform === 'win32' ? 10_000 : 5_000,
 }, () => {
-  it('does not recreate the shared Profile fallback while the packaged ASAR resolver is active', async () => {
+  it('reclaims the shared Profile fallback the upstream heal materializes under a packaged ASAR anchor', async () => {
     const home = temporaryHome()
     const installAnchor = join(
       home,
@@ -93,13 +94,28 @@ describe('desktop profile composition', {
       'dsh',
       'package.json',
     )
+    mkdirSync(dirname(installAnchor), { recursive: true })
+    writeFileSync(
+      installAnchor,
+      JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.1.6-alpha.1', dependencies: {} }),
+      'utf8',
+    )
+    const sharedModules = join(home, 'profiles', 'node_modules')
     const releaseResolver = retainAsarModuleResolver()
     try {
-      await expect(healProfilesModuleFallback({ home, installAnchor })).resolves.toBeUndefined()
-      expect(existsSync(join(home, 'profiles', 'node_modules'))).toBe(false)
+      // Upstream 0.1.6 always materializes and reports the generation it wrote, so
+      // the packaged ASAR anchor no longer short-circuits the installation closure.
+      const generation = await healProfilesModuleFallback({ home, installAnchor })
+      expect(generation.entries.map(entry => entry.name)).toContain('@deepseek-ai/dsh')
+      expect(existsSync(join(sharedModules, '@deepseek-ai', 'dsh'))).toBe(true)
     } finally {
       releaseResolver()
     }
+    // Desktop resolves the installation closure itself, so the links into the
+    // current app.asar are reclaimed before an app update can strand them.
+    expect(removeObsoleteDesktopSharedModuleFallback(home)).toBe(1)
+    expect(existsSync(join(sharedModules, '@deepseek-ai'))).toBe(false)
+    expect(readdirSync(sharedModules)).toEqual([])
   })
 
   it('removes only provably managed legacy shared fallbacks', () => {
