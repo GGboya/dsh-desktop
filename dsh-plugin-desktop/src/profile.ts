@@ -1184,15 +1184,17 @@ export function prepareDesktopProfile(
 }
 
 /** Maintain the upstream module fallback for one fully resolved Desktop profile. */
-export function healDesktopProfileModuleFallback(home: string, profile?: Profile): Promise<void> {
+export async function healDesktopProfileModuleFallback(home: string, profile?: Profile): Promise<void> {
   const heal = () => healProfilesModuleFallback({
     installAnchor: INSTALL_ANCHOR,
     home,
     ...(profile === undefined ? {} : { profile }),
   })
-  if (!/([\\/])app\.asar\1/u.test(INSTALL_ANCHOR)) return heal()
+  if (!/([\\/])app\.asar\1/u.test(INSTALL_ANCHOR)) { await heal(); return }
   removeObsoleteDesktopSharedModuleFallback(home)
-  return withAsarModuleResolver(heal)
+  // The upstream heal now reports the resolution generation it produced; Desktop
+  // has no consumer for it, so it is discarded rather than widened into this API.
+  await withAsarModuleResolver(heal)
 }
 
 function isDshManagedModuleProxy(directory: string): boolean {
