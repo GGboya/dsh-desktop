@@ -1833,30 +1833,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-app-boot@patch:@deepseek-ai/dsh-app-boot@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-app-boot-0.1.5-rc.2.tgz#./patches/dsh-app-boot@0.1.5-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
-  version: 0.1.5-rc.2
-  resolution: "@deepseek-ai/dsh-app-boot@patch:@deepseek-ai/dsh-app-boot@file%3Avendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-app-boot-0.1.5-rc.2.tgz%23vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-app-boot-0.1.5-rc.2.tgz%3A%3Ahash=db0dac&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-app-boot@0.1.5-rc.2.patch::version=0.1.5-rc.2&hash=9f1d60&locator=deepseek-harness-desktop%40workspace%3A."
-  dependencies:
-    "@deepseek-ai/dsh-atomic-write": "npm:^0.1.5-rc.2"
-    "@deepseek-ai/dsh-package-manifest": "npm:^0.1.5-rc.2"
-    js-yaml: "npm:^4.2.0"
-    resolve.exports: "npm:^2.0.3"
-  peerDependencies:
-    "@deepseek-ai/cordis": ^4.0.2
-    "@deepseek-ai/cordis-plugin-group": ^1.0.2
-    "@deepseek-ai/cordis-plugin-hmr": ^1.0.17
-    "@deepseek-ai/cordis-plugin-include": ^1.0.7
-    "@deepseek-ai/cordis-plugin-loader": ^1.0.3
-    "@deepseek-ai/dsh-home-paths": ^0.1.5-rc.2
-    "@deepseek-ai/dsh-launch-environment": ^0.1.5-rc.2
-    "@deepseek-ai/dsh-system-prompt": ^0.1.5-rc.2
-  peerDependenciesMeta:
-    "@deepseek-ai/cordis-plugin-hmr":
-      optional: true
-  checksum: 10c0/0b49a6c2d46780e67c0b4b5e2a338dc5c0b4e4165a3895f365230bd41296042bc021d559f36e66d42aeeb254d6f18dccaeba07b1e419faabb92ca690e5f064d5
-  languageName: node
-  linkType: hard
-
 "@deepseek-ai/dsh-atomic-write@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-atomic-write-0.1.5-rc.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.5-rc.2
   resolution: "@deepseek-ai/dsh-atomic-write@file:vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-atomic-write-0.1.5-rc.2.tgz#vendor/dsh-runtime/0.1.5-rc.2/deepseek-ai-dsh-atomic-write-0.1.5-rc.2.tgz::hash=f6dcbf&locator=deepseek-harness-desktop%40workspace%3A."

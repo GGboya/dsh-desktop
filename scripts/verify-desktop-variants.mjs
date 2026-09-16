@@ -13,10 +13,6 @@ const allowedDifferences = new Set([
   // execution deadline and returns { result, spawnRequested }; stable stays on
   // 0.1.5-rc.2, whose override takes an argv array and returns ShellRunResult.
   'windows-pwsh-sandbox.ts',
-  // Beta rides 0.1.6-alpha.1, whose healProfilesModuleFallback reports the resolution
-  // generation it produced, so the Beta wrapper awaits and discards it; stable stays on
-  // 0.1.5-rc.2, whose heal returns Promise<void> and is forwarded directly.
-  'profile.ts',
 ])
 const normalizeIdentity = source => source.toString().replaceAll('dsh-plugin-desktop-beta', 'dsh-plugin-desktop').replaceAll('DSH Desktop Beta', 'DSH Desktop')
 
