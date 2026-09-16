@@ -52,6 +52,7 @@ function fixture(platform: 'darwin' | 'win32' = 'darwin', mode: 'compatibility' 
     openTerminal: vi.fn(), restart: vi.fn(async () => {}), restartToRecovery: vi.fn(async () => {}),
     reload: vi.fn(), developerTools: vi.fn(),
     checkForUpdates: vi.fn(async () => {}),
+    exportDiagnostics: vi.fn(async () => {}),
   }
   const spec = { mode, material, requestModeChange: vi.fn(async () => {}) } as unknown as DesktopShellSpec
   const shell = new CompatibilityShell(window as unknown as BrowserWindow, spec, platform, '/desktop/preload.cjs', actions)

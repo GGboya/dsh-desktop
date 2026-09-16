@@ -126,6 +126,8 @@ const electron = vi.hoisted(() => {
     focus: vi.fn(),
     isDestroyed: vi.fn(() => false),
     close: vi.fn(),
+    ipc: { handle: vi.fn(), removeHandler: vi.fn() },
+    mainFrame: { url: 'http://127.0.0.1:41234/' },
     loadURL,
   }
   const chromeWebContents = {

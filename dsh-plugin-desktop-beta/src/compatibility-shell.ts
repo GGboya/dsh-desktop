@@ -1,19 +1,14 @@
 import { WebContentsView, type BrowserWindow, type WebContents } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { COMPATIBILITY_CHROME_CHANNEL, COMPATIBILITY_CHROME_STATE, type CompatibilityChromeState } from './compatibility-chrome-contract.ts'
+import type { DesktopRendererActionHandlers } from './renderer-actions-dispatch.ts'
 import type { DesktopLocale, DesktopPlatform, DesktopShellSpec } from './runtime.ts'
 import { DESKTOP_FRAME_HEIGHT } from './window-chrome.ts'
 import { DESKTOP_RENDERER_SESSION_PARTITION } from './window-options.ts'
 
-export interface CompatibilityShellActions {
+export interface CompatibilityShellActions extends DesktopRendererActionHandlers {
   locale(): DesktopLocale
   version: string
-  openTerminal(): void
-  restart(): Promise<void>
-  restartToRecovery(): Promise<void>
-  reload(): void
-  developerTools(): void
-  checkForUpdates(): Promise<void>
   remoteControl?: { read(): Promise<{ enabled: boolean; seen: boolean }>; open(): Promise<void> }
 }
 

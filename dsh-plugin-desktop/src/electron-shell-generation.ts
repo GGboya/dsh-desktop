@@ -16,6 +16,8 @@ import { formatDesktopExitCode } from './desktop-logger.ts'
 import { showDesktopMessageBox } from './desktop-dialog-window.ts'
 import { applicationNeedsReveal, revealApplication } from './electron-reveal.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
+import { DESKTOP_RENDERER_ACTION_CHANNEL } from './renderer-actions-contract.ts'
+import { createDesktopRendererActionDispatcher } from './renderer-actions-dispatch.ts'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
@@ -148,6 +150,15 @@ function installRendererAccessHeader(
     if (!active) return
     active = false
     webRequest.onBeforeSendHeaders(null)
+  }
+}
+
+function sameOriginFrame(frameUrl: string | undefined, origin: string): boolean {
+  if (frameUrl === undefined) return false
+  try {
+    return new URL(frameUrl).origin === origin
+  } catch {
+    return false
   }
 }
 
@@ -294,6 +305,22 @@ export class ElectronShellGeneration {
     const renderer = this.compatibilityShell?.webContents ?? window.webContents
     const chrome = this.compatibilityShell?.chromeWebContents ?? window.webContents
     this.renderer = renderer
+
+    // Desktop-owned actions stay on the Electron lifetime. The page reaches the
+    // main process directly, so a Host generation that exited, hung, or never
+    // booted cannot take restart, terminal, or diagnostics down with it.
+    const dispatchRendererAction = createDesktopRendererActionDispatcher(
+      this.options.chromeActions,
+      message => { this.options.logError(message) },
+    )
+    renderer.ipc.handle(DESKTOP_RENDERER_ACTION_CHANNEL, async (event, action: unknown) => {
+      if (this.released || event.sender !== renderer
+        || event.senderFrame === null || event.senderFrame !== renderer.mainFrame
+        || !sameOriginFrame(event.senderFrame.url, origin)) {
+        throw new Error('dsh-plugin-desktop: untrusted Desktop action sender')
+      }
+      await dispatchRendererAction(action)
+    })
 
     let stateWriteTimer: ReturnType<typeof setTimeout> | undefined
     const persistWindowState = (): void => {
@@ -537,6 +564,7 @@ export class ElectronShellGeneration {
       renderer.off('did-fail-load', loadFailed)
       renderer.off('did-start-loading', resetSurface)
       renderer.off('did-finish-load', loaded)
+      if (!renderer.isDestroyed()) renderer.ipc.removeHandler(DESKTOP_RENDERER_ACTION_CHANNEL)
       if (isolated) {
         chrome.off('before-input-event', handleZoomShortcut)
         chrome.off('render-process-gone', rendererGone)
