@@ -9,10 +9,16 @@ const betaRoot = join(root, 'dsh-plugin-desktop-beta', 'src')
 const betaOnlyPaths = new Set([])
 const allowedDifferences = new Set([
   'product-identity.ts',
-  // Beta rides dsh 0.1.6-alpha.1, whose runArgv fuses confinement preparation into the
+  // Beta rides dsh 0.1.6-alpha.2, whose runArgv fuses confinement preparation into the
   // execution deadline and returns { result, spawnRequested }; stable stays on
   // 0.1.5-rc.2, whose override takes an argv array and returns ShellRunResult.
   'windows-pwsh-sandbox.ts',
+  // dsh 0.1.6-alpha.2 dropped the profile patch-reload policy: `patchReload` is gone from
+  // ProfileTemplate, Profile, and the profile manifest, `initProfile` takes two arguments,
+  // and reload is owned by the `hmr` entry in a profile's cordis.patch.yml instead. Beta
+  // follows that API; stable stays on 0.1.5-rc.2, where the field still exists.
+  'profile.ts',
+  'profile-manager.ts',
 ])
 const normalizeIdentity = source => source.toString().replaceAll('dsh-plugin-desktop-beta', 'dsh-plugin-desktop').replaceAll('DSH Desktop Beta', 'DSH Desktop')
 
