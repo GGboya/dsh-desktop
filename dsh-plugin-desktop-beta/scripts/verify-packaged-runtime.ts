@@ -195,12 +195,12 @@ export const REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES = [
 /** ABI-pinned fs-ext bindings selected by non-universal macOS and Linux packages. */
 export const REQUIRED_POSIX_FS_EXT_ENTRIES = {
   darwin: {
-    x64: 'node_modules/fs-ext/prebuilds/darwin-x64/electron.abi148.node',
-    arm64: 'node_modules/fs-ext/prebuilds/darwin-arm64/electron.abi148.node',
+    x64: 'node_modules/fs-ext/prebuilds/darwin-x64/electron.abi149.node',
+    arm64: 'node_modules/fs-ext/prebuilds/darwin-arm64/electron.abi149.node',
   },
   linux: {
-    x64: 'node_modules/fs-ext/prebuilds/linux-x64/electron.abi148.node',
-    arm64: 'node_modules/fs-ext/prebuilds/linux-arm64/electron.abi148.node',
+    x64: 'node_modules/fs-ext/prebuilds/linux-x64/electron.abi149.node',
+    arm64: 'node_modules/fs-ext/prebuilds/linux-arm64/electron.abi149.node',
   },
 } as const
 

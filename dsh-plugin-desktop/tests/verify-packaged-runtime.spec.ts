@@ -791,4 +791,27 @@ describe('packaged desktop runtime verification', () => {
     expect(() => smokePackagedElectronRuntime(context('/build', process.platform), run))
       .toThrow('status null; signal=SIGTERM')
   })
+
+  // `prepare-fs-ext.ts` names its output after the ABI of whichever Electron is
+  // actually installed (`electron.abi${abi}.node`), but the manifests above spell that
+  // number out. Bumping the Electron pin across an ABI boundary therefore makes the two
+  // disagree, and nothing fails until a packaging job goes looking for a file that was
+  // never built — on macOS that surfaced only as "universal macOS runtime is missing 2
+  // native file(s)" at the very end of a 14-minute job. Reading electron's own
+  // `abi_version` here turns that into an immediate, every-platform unit failure.
+  it('pins fs-ext ABI manifests to the ABI of the installed Electron', () => {
+    const abi = readFileSync(
+      fileURLToPath(new URL('../node_modules/electron/abi_version', import.meta.url)),
+      'utf8',
+    ).trim()
+    expect(abi).toMatch(/^\d+$/)
+
+    const manifestPaths = [
+      ...Object.values(REQUIRED_POSIX_FS_EXT_ENTRIES).flatMap(byArch => Object.values(byArch)),
+      ...REQUIRED_MACOS_UNIVERSAL_ENTRIES,
+    ].filter(path => path.includes('/fs-ext/'))
+
+    expect(manifestPaths.length).toBeGreaterThan(0)
+    expect(manifestPaths.filter(path => !path.endsWith(`/electron.abi${abi}.node`))).toEqual([])
+  })
 })

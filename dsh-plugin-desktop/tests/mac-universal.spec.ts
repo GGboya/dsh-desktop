@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
   MACOS_UNIVERSAL_NATIVE_ENTRIES,
@@ -6,15 +8,25 @@ import {
 } from '../scripts/mac-universal.ts'
 
 describe('universal macOS native runtime preparation', () => {
-  it('tracks the Electron 43 fs-ext binding for both CPU architectures', () => {
+  // fs-ext is the only universal entry whose filename moves with the Electron ABI. Spelling
+  // that number out made this spec the last thing standing between an ABI bump and a green
+  // `check` job, and it lost: bumping Electron turned a previously green job red instead of
+  // catching the drift. Derive the number so the assertion survives the next bump.
+  it('tracks the fs-ext binding for both CPU architectures at the installed Electron ABI', () => {
+    const abi = readFileSync(
+      fileURLToPath(new URL('../node_modules/electron/abi_version', import.meta.url)),
+      'utf8',
+    ).trim()
+    expect(abi).toMatch(/^\d+$/)
+
     expect(MACOS_UNIVERSAL_NATIVE_ENTRIES).toEqual(expect.arrayContaining([
       {
         arch: 'arm64',
-        path: 'node_modules/fs-ext/prebuilds/darwin-arm64/electron.abi148.node',
+        path: `node_modules/fs-ext/prebuilds/darwin-arm64/electron.abi${abi}.node`,
       },
       {
         arch: 'x86_64',
-        path: 'node_modules/fs-ext/prebuilds/darwin-x64/electron.abi148.node',
+        path: `node_modules/fs-ext/prebuilds/darwin-x64/electron.abi${abi}.node`,
       },
     ]))
   })
