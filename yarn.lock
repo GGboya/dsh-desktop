@@ -13465,7 +13465,7 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     dsh-community-market: "npm:0.1.0-dev.0"
-    electron: "npm:44.0.0"
+    electron: "npm:44.4.0"
     lucide-react: "npm:^1.33.0"
     playwright: "npm:1.63.0"
     pnpm: "npm:11.8.0"
@@ -14053,6 +14053,20 @@ __metadata:
     electron: cli.js
     install-electron: install.js
   checksum: 10c0/50fa36d8f3a56f499934ee3077a98f866fd216ac69d05ebed6200613f905fce893365b4ad9bb299272daeaebd1354b668e45f40948d85cd213489faee46ab305
+  languageName: node
+  linkType: hard
+
+"electron@npm:44.4.0":
+  version: 44.4.0
+  resolution: "electron@npm:44.4.0"
+  dependencies:
+    "@electron-internal/extract-zip": "npm:^1.0.1"
+    "@electron/get": "npm:^5.0.0"
+    "@types/node": "npm:^24.9.0"
+  bin:
+    electron: cli.js
+    install-electron: install.js
+  checksum: 10c0/447ed7ca72a558374d1295dbc65726c19fb3c662ca3b655873b5bbf1f84318162173bb2b8371d4269c1ae7c9451b11209d8c483ab934137f9e2926c21aa2712a
   languageName: node
   linkType: hard
 

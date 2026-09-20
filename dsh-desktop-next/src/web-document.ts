@@ -1,6 +1,7 @@
 /** Local Web document and authenticated HTTP forwarding for the application window. */
 import { readFile } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
+import type { ProtocolRequest } from 'electron'
 import { NATIVE_ACCESS_HEADER } from './desktop-contract.ts'
 
 const MIME: Readonly<Record<string, string>> = {
@@ -57,12 +58,16 @@ export async function authenticateWebHost(url: string, nativeToken?: string): Pr
  * @param cookie - Host-issued authentication cookie.
  * @returns Host response without network-only encoding headers.
  */
-export async function forwardWebRequest(request: Request, host: string, cookie: string, nativeToken?: string): Promise<Response> {
+export async function forwardWebRequest(request: Request & Pick<ProtocolRequest, 'initiatorOrigin'>, host: string, cookie: string, nativeToken?: string): Promise<Response> {
   const source = new URL(request.url)
   const origin = request.headers.get('origin')
+  // Electron 44.4+ preserves Chromium's initiator separately from HTTP headers.
+  // Same-origin custom-protocol fetches can omit Origin; neither a missing header
+  // nor a page-controlled referrer proves that the request came from our app.
+  if (source.protocol !== 'dsh-app:' || source.host !== 'app' || source.username || source.password
+    || request.initiatorOrigin !== 'dsh-app://app') return new Response(null, { status: 403 })
   if (origin !== null && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
   const market = source.pathname.startsWith('/api/community-market/')
-  if (market && !['GET', 'HEAD'].includes(request.method) && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
   const target = new URL(host)
   target.pathname = source.pathname
   target.search = source.search
