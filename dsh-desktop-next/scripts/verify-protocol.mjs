@@ -4,9 +4,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, protocol } from 'electron'
+import { app, BrowserWindow, protocol, session } from 'electron'
 import { NextDesktopRuntime } from '../lib/desktop-runtime.js'
-import { forwardWebRequest } from '../lib/web-document.js'
+import { appRequestHeaders, forwardWebRequest } from '../lib/web-document.js'
 
 if (process.platform !== 'linux' || !process.env.DISPLAY) {
   console.error('Run this native protocol check on Linux under xvfb-run; use check:next for portable headless checks.')
@@ -41,8 +41,11 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
         headers: { 'content-type': 'text/html' },
       })
       const response = await forwardWebRequest(request, url, cookie, token)
-      observed.push({ initiator: request.initiatorOrigin, origin: request.headers.get('origin'), status: response.status })
+      observed.push({ origin: request.headers.get('origin'), marked: request.headers.get('x-dsh-desktop-renderer') === token, status: response.status })
       return response
+    })
+    session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
+      callback({ requestHeaders: appRequestHeaders(details, window?.webContents, token) })
     })
     window = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } })
     await window.loadURL('dsh-app://app/')
@@ -66,7 +69,7 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
     assert.equal(selected.sources.find(source => source.sourceRecordId === sourceRecordId)?.enabled, true)
     const removed = await call('sources', { action: 'remove', sourceRecordId })
     assert.equal(removed.sources.some(source => source.sourceRecordId === sourceRecordId), false)
-    assert.ok(observed.every(request => request.initiator === 'dsh-app://app'))
+    assert.ok(observed.every(request => request.marked))
     console.log('Native protocol request metadata:', JSON.stringify(observed))
 
     // Same protocol, different origin; an opaque response must not cause a mutation.
@@ -77,11 +80,11 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
       body: ${JSON.stringify(JSON.stringify({ action: 'add-builtin', key }))},
     }).catch(() => {})`)
     assert.equal(observed.length, before + 1)
-    assert.equal(observed.at(-1).initiator, 'dsh-app://shell')
+    assert.equal(observed.at(-1).marked, false)
     assert.equal(observed.at(-1).status, 403)
     await window.loadURL('dsh-app://app/')
     assert.equal((await call('state')).sources.some(source => source.builtInProviderKey === key), false)
-    console.log('Next native protocol check passed: renderer source mutations, initiator identity and foreign-page rejection.')
+    console.log('Next native protocol check passed: renderer source mutations, owned-frame markers and foreign-page rejection.')
   } catch (error) {
     console.error(error)
     exitCode = 1

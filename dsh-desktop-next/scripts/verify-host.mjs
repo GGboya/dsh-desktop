@@ -65,14 +65,15 @@ try {
   const stateBody = await state.json()
   assert.ok(Array.isArray(stateBody.sources))
   assert.deepEqual(stateBody.desktopActions, { openTerminal: ['darwin', 'win32'].includes(process.platform), requestRestart: true })
+  const nativeToken = 'fixture-native-request'
   const call = async (path, body, expected = 200) => {
-    // Match protocol.handle's native metadata, including an absent Origin header.
-    const request = Object.assign(new Request(`dsh-app://app/api/community-market/${path}`, {
+    // Match the native session marker, including an absent Origin header.
+    const request = new Request(`dsh-app://app/api/community-market/${path}`, {
       method: body === undefined ? 'GET' : 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-dsh-desktop-renderer': nativeToken },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }), { initiatorOrigin: 'dsh-app://app' })
-    const response = await forwardWebRequest(request, origin, cookie)
+    })
+    const response = await forwardWebRequest(request, origin, cookie, nativeToken)
     const result = await response.json()
     assert.equal(response.status, expected, JSON.stringify(result))
     return result

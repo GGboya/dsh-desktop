@@ -190,7 +190,7 @@
     "@vitejs/plugin-react": "^6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "electron": "44.4.0",
+    "electron": "44.0.0",
     "lucide-react": "^1.33.0",
     "playwright": "1.63.0",
     "react-dom": "18.3.1",
