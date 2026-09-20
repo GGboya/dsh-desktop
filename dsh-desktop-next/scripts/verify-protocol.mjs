@@ -12,6 +12,11 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
   console.error('Run this native protocol check on Linux under xvfb-run; use check:next for portable headless checks.')
   app.exit(1)
 } else {
+  // Electron emits ready after evaluating its ESM entry; do not await it at module scope.
+  void verify()
+}
+
+async function verify() {
   const root = fileURLToPath(new URL('..', import.meta.url))
   const home = mkdtempSync(join(tmpdir(), 'dsh-next-protocol-'))
   app.setPath('userData', home)
@@ -25,9 +30,11 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
   let window
   let exitCode = 0
   const observed = []
-  const deadline = setTimeout(() => { console.error('Native protocol check timed out'); app.exit(1) }, 60_000)
+  let stage = 'Electron ready'
+  const deadline = setTimeout(() => { console.error(`Native protocol check timed out: ${stage}`); app.exit(1) }, 60_000)
   try {
     await app.whenReady()
+    stage = 'Host startup'
     runtime.initialize()
     runtime.profiles.ensure('default')
     runtime.profiles.setFeatures('default', { market: true, remoteControl: false })
@@ -48,6 +55,7 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
       callback({ requestHeaders: appRequestHeaders(details, window?.webContents, token) })
     })
     window = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } })
+    stage = 'renderer load'
     await window.loadURL('dsh-app://app/')
     const call = async (path, body) => {
       const result = await window.webContents.executeJavaScript(`(async () => {
@@ -61,6 +69,7 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
       assert.equal(result.status, 200, result.body)
       return JSON.parse(result.body)
     }
+    stage = 'native Market requests'
     const state = await call('state')
     const key = state.builtIns[0].key
     const added = await call('sources', { action: 'add-builtin', key })
@@ -73,6 +82,7 @@ if (process.platform !== 'linux' || !process.env.DISPLAY) {
     console.log('Native protocol request metadata:', JSON.stringify(observed))
 
     // Same protocol, different origin; an opaque response must not cause a mutation.
+    stage = 'foreign page rejection'
     await window.loadURL('dsh-app://shell/')
     const before = observed.length
     await window.webContents.executeJavaScript(`fetch('dsh-app://app/api/community-market/sources', {
