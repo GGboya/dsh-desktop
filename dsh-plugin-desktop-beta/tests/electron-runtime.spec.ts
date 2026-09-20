@@ -835,7 +835,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const query = vi.fn(() => ({ root: 'E:\\', fileSystem: 'EXFAT', driveType: 2 }))
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger, query)
 
     await expect(runtime.validateDirectory('E:\\repo')).resolves.toBe(false)
@@ -853,7 +853,7 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showMessageBox.mockResolvedValue({ response: 1, checkboxChecked: false })
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const query = vi.fn(() => ({ root: 'E:\\', fileSystem: 'NTFS', driveType: 2 }))
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger, query)
 
     await expect(runtime.validateDirectory('E:\\repo')).resolves.toBe(false)
@@ -873,7 +873,7 @@ describe('Electron desktop runtime', () => {
   it('logs renderer crashes with the Windows exception code', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
     const release = runtime.schedule(spec)
     await runtime.mountScheduled()
@@ -893,7 +893,7 @@ describe('Electron desktop runtime', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn(() => true)
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot, logger)
     const release = runtime.schedule(spec)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
@@ -1020,7 +1020,7 @@ describe('Electron desktop runtime', () => {
       vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
       const restart = vi.fn(async () => {})
-      const logger = { error: vi.fn(), errorCause: vi.fn() }
+      const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
       const runtime = new ElectronDesktopRuntime(restart, undefined, logger)
       const release = runtime.schedule(spec)
       const commitHealthy = vi.fn(async () => {})
@@ -1402,7 +1402,7 @@ describe('Electron desktop runtime', () => {
   it('keeps external window links deny-by-default with a narrow protocol allowlist', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
     const release = runtime.schedule(spec)
 
@@ -2144,7 +2144,7 @@ describe('Electron desktop runtime', () => {
   it('logs the renderer boot failure details for diagnostics', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, () => {}, logger)
     const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
@@ -2569,7 +2569,7 @@ describe('Electron desktop runtime', () => {
       canceled: false,
       filePath: 'C:\\Updates\\DSH-Desktop-2.1.0-windows.exe',
     })
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
 

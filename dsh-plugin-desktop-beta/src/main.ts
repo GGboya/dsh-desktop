@@ -1,7 +1,7 @@
 /** DSH Desktop executable: minimal Electron bootstrap around the Host Cordis root. */
 
 import { startIsolatedDesktopHost } from './host-process.ts'
-import { app, crashReporter, safeStorage, shell } from 'electron'
+import { app, crashReporter, safeStorage, session, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -15,6 +15,7 @@ import {
   type FailLoudProcess,
 } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
+import { installProxyFromEnvironment } from '@deepseek-ai/dsh-http-proxy'
 import {
   DSH_LAUNCH_ENVIRONMENT_KEY,
   type LaunchEnvironmentSnapshot,
@@ -57,6 +58,14 @@ import {
   desktopLoopbackBrowserUrl,
 } from './desktop-network.ts'
 import { desktopLanAddresses } from './lan-addresses.ts'
+import {
+  buildDesktopProxyOverlay,
+  desktopProxyEnvLookup,
+  parsePacProxyResult,
+  socksProxyDiagnostic,
+  PROBE_URLS,
+  type DesktopSystemProxyProbe,
+} from './system-proxy.ts'
 import type { DesktopLanHttpsPrivateKeyProtector } from './lan-https-certificate.ts'
 import {
   DESKTOP_LAN_HTTPS_CA_PATH,
@@ -228,6 +237,69 @@ function withDesktopDshHome(
         : environment.getFrom(name, sources)
     },
   })
+}
+
+/** The proxy resolver reads a fresh configuration lazily; give it a moment before believing DIRECT. */
+const SYSTEM_PROXY_PROBE_ATTEMPTS = 3
+const SYSTEM_PROXY_PROBE_BACKOFF_MS = 200
+
+/**
+ * Ask Chromium what the operating system routes each probe URL through.
+ *
+ * Chromium already owns this answer: it reads the Windows registry, the macOS network preferences,
+ * and the Linux desktop settings, and it evaluates PAC and WPAD before answering. Re-reading those
+ * sources here would mean reimplementing all of it and still disagreeing with the application's own
+ * windows. Probing is the whole reason a "system proxy" toggle in a proxy client now reaches the
+ * agent: that toggle sets no environment variable.
+ *
+ * A failure is never fatal. The application must start on a machine whose proxy configuration
+ * cannot be read, connecting directly, exactly as it did before this existed.
+ *
+ * Nothing is logged from here. Every note travels out on the return value and reaches the log
+ * through the one resolution the caller reports, so a diagnostic can never be printed twice or --
+ * worse -- printed in a shape that disagrees with the decision that was actually made.
+ *
+ * @returns the proxy for each scheme, whether probes disagreed, and what was rejected.
+ */
+async function probeSystemProxy(): Promise<DesktopSystemProxyProbe> {
+  const notes: string[] = []
+  const rejected: string[] = []
+  try {
+    const resolver = session.defaultSession
+    try {
+      await resolver.forceReloadProxyConfig()
+    } catch (cause) {
+      notes.push(`could not refresh the system proxy configuration: ${String(cause)}`)
+    }
+    for (let attempt = 1; attempt <= SYSTEM_PROXY_PROBE_ATTEMPTS; attempt += 1) {
+      // Every attempt re-reads one configuration, so only the last round describes what was acted
+      // on. Clearing keeps a single SOCKS port from being reported once per attempt.
+      rejected.length = 0
+      const answers = new Map<string, string>()
+      for (const url of PROBE_URLS) {
+        const result = parsePacProxyResult(await resolver.resolveProxy(url))
+        if (result.kind === 'proxy') answers.set(url, result.url)
+        else if (result.kind === 'unsupported') rejected.push(socksProxyDiagnostic(url, result.detail))
+      }
+      if (answers.size === 0) {
+        // A session resolves its first request before the configuration lands; retry before
+        // concluding the machine is direct, but never let that delay a genuinely direct start.
+        if (rejected.length > 0 || attempt === SYSTEM_PROXY_PROBE_ATTEMPTS) break
+        await new Promise(resolve => setTimeout(resolve, SYSTEM_PROXY_PROBE_BACKOFF_MS))
+        continue
+      }
+      const probe: { http?: string; https?: string } = {}
+      for (const [url, proxy] of answers) {
+        if (url.startsWith('https:')) probe.https ??= proxy
+        else probe.http ??= proxy
+      }
+      const disagreed = new Set(answers.values()).size > 1 || answers.size !== PROBE_URLS.length
+      return { ...probe, disagreed, notes: Object.freeze([...notes, ...rejected]) }
+    }
+  } catch (cause) {
+    notes.push(`could not read the system proxy configuration: ${String(cause)}`)
+  }
+  return { notes: Object.freeze([...notes, ...rejected]) }
 }
 
 /** Require OS-backed secret storage; Linux's plaintext fallback is not sufficient for a CA key. */
@@ -710,6 +782,22 @@ async function start(): Promise<void> {
     }
     process.env.DSH_HOME = homeDir
     const desktopLaunchEnvironment = withDesktopDshHome(environment, homeDir)
+    // Before anything can send a request. `installProxyFromEnvironment` also writes the resolved
+    // names back into `process.env` in both casings, which is how `host-process.ts`'s
+    // `env: { ...process.env }` carries this route to the Host and to every process it spawns --
+    // pnpm, stdio MCP servers, the bash tool.
+    const proxyResolution = buildDesktopProxyOverlay({
+      env: desktopLaunchEnvironment,
+      probe: await probeSystemProxy(),
+      lanAddresses: desktopLanAddresses(),
+    })
+    electronLogger.info(`${BIN_NAME}: ${proxyResolution.summary}`)
+    for (const diagnostic of proxyResolution.diagnostics) electronLogger.error(`${BIN_NAME}: ${diagnostic}`)
+    const releaseProxy = await installProxyFromEnvironment(
+      desktopProxyEnvLookup(desktopLaunchEnvironment, proxyResolution.overlay),
+      message => { electronLogger.error(`${BIN_NAME}: ${message}`) },
+    )
+    generation.own(() => { void releaseProxy() })
     const projectionCacheRecovery = recoverOversizedSessionProjectionCache(homeDir)
     if (projectionCacheRecovery.status === 'quarantined') {
       sessionProjectionCacheRecovery = projectionCacheRecovery
@@ -1504,6 +1592,7 @@ async function start(): Promise<void> {
       await startIsolatedDesktopHost({
         host: { prepared, profilePreferences, homeDir, activeProfileName, pluginManagementStatePath,
           selectionStatePath, marketUserDataDir, releaseUserDataLocations, desktopLaunchEnvironment,
+          desktopProxyOverlay: proxyResolution.overlay,
           desktopPnpmBootstrap, logDirectory: join(desktopUserDataDir, 'logs', 'host') },
         runtime, rendererToken: browserAccess.rendererHeader.value,
         prepareCertificate: prepareHostCertificate,

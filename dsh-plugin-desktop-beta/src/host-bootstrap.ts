@@ -43,6 +43,15 @@ export interface DesktopHostOptions {
   marketUserDataDir: string
   releaseUserDataLocations: DesktopReleaseUserDataLocations
   desktopLaunchEnvironment: LaunchEnvironmentSnapshot
+  /**
+   * Proxy names the supervisor synthesized from the operating system's configuration, keyed
+   * lowercase, empty when the user exported a proxy themselves or the machine has none.
+   *
+   * Passed rather than re-derived: a launch environment snapshot is frozen when it loads, so the
+   * supervisor's later writes to `process.env` never reach it, and the Host re-probing on its own
+   * could reach a different answer than the window the user is looking at.
+   */
+  desktopProxyOverlay: Readonly<Record<string, string>>
   desktopPnpmBootstrap: DesktopPnpmBootstrap
   logDirectory: string
 }

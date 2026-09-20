@@ -7,6 +7,14 @@ export interface DesktopLogger {
   error(message: string): void
   /** Log an unknown cause, normalizing errors/objects/strings. */
   errorCause(cause: unknown): void
+  /**
+   * Log a message that records what the process decided, not that something went wrong.
+   *
+   * Startup facts belong in the log even when nothing failed: a report of "it cannot reach the
+   * network" is unanswerable without knowing which egress route the process chose, and a line that
+   * only appears on failure cannot establish that.
+   */
+  info(message: string): void
 }
 
 /** Process events needed to make uncaught exceptions observable and fatal. */
@@ -94,5 +102,15 @@ export class ElectronStderrLogger implements DesktopLogger {
   errorCause(cause: unknown): void {
     const text = cause instanceof Error ? cause.stack ?? cause.message : String(cause)
     this.error(text)
+  }
+
+  info(message: string): void {
+    const masked = maskSecrets(message)
+    try {
+      this.sink?.write('info', masked)
+    } catch {
+      // Persistent diagnostics are best-effort; stderr must remain available.
+    }
+    process.stderr.write(`${masked}\n`)
   }
 }

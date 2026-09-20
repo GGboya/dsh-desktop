@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -26,7 +26,7 @@ function sink(): { s: LogFileSink; dir: string } {
 describe('ElectronStderrLogger', () => {
   it('logs Electron child process crashes with the Windows exception code', () => {
     const app = new EventEmitter()
-    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const logger = { error: vi.fn(), errorCause: vi.fn(), info: vi.fn() }
     const remove = installDesktopChildProcessLogging(app, logger)
 
     app.emit('child-process-gone', {}, {
@@ -53,6 +53,35 @@ describe('ElectronStderrLogger', () => {
     stderrSpy.mockRestore()
     const day = todaySuffix()
     expect(readFileSync(join(dir, `dsh-${day}.log`), 'utf8')).toContain('boom')
+  })
+
+  it('writes an informational line to the full log without the error log', () => {
+    const { s, dir } = sink()
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const logger = new ElectronStderrLogger(s)
+
+    logger.info('outbound proxy = none (source: none)')
+
+    expect(stderrSpy).toHaveBeenCalled()
+    stderrSpy.mockRestore()
+    const day = todaySuffix()
+    expect(readFileSync(join(dir, `dsh-${day}.log`), 'utf8')).toContain('outbound proxy = none')
+    // A startup fact is not a fault. Routing it to the error log would make every healthy start
+    // look like it had one, and the error log is where triage looks first.
+    expect(existsSync(join(dir, `dsh-error-${day}.log`))).toBe(false)
+  })
+
+  it('masks credentials in an informational proxy line', () => {
+    const { s, dir } = sink()
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const logger = new ElectronStderrLogger(s)
+
+    logger.info('outbound proxy = http://alice:hunter2@proxy.corp:8080 (source: environment HTTPS_PROXY)')
+
+    stderrSpy.mockRestore()
+    const text = readFileSync(join(dir, `dsh-${todaySuffix()}.log`), 'utf8')
+    expect(text).not.toContain('hunter2')
+    expect(text).toContain('proxy.corp:8080')
   })
 
   it('renders an unknown cause as a string', () => {

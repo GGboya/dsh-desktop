@@ -44,6 +44,19 @@ Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送�
 
 打包后的应用会在后台检查稳定版本，但不会静默安装。发现新版本后先征得用户确认；下载前可以在原生保存对话框中选择安装包的目录和文件名，取消保存不会开始下载。macOS 下载并打开 DMG，Windows 下载并启动 NSIS 安装程序。升级完成并重新启动后，应用会询问是否删除或保留安装包。网络或下载失败不会破坏当前安装。
 
+## 应用会走我的系统代理吗？
+
+会。启动时应用会读取操作系统的代理配置——Windows 的 Internet 选项、macOS 的网络设置、Linux 的桌面设置，包含自动配置脚本（PAC/WPAD）——并把它应用到自己发出的全部请求上：模型对话、网页抓取、联网搜索、MCP 服务、插件安装，以及终端里由应用启动的命令。在 Clash、v2rayN 这类客户端里打开“系统代理”开关就够了，不需要在应用里另外填写。
+
+几条需要知道的规则：
+
+- **自己设的环境变量优先。** 启动前设置了 `HTTPS_PROXY`、`HTTP_PROXY` 或 `ALL_PROXY`，应用就用你设的那个，不再读系统代理。`NO_PROXY` 同样生效。
+- **改完代理要重启应用。** 代理配置只在启动时读一次。在代理客户端里开关系统代理、或切换节点导致端口变化之后，请退出应用再打开。
+- **纯 SOCKS 的配置用不了。** 应用的 HTTP 出口只认 `http://` 和 `https://` 的代理。如果系统代理只配了 SOCKS，请在代理客户端里打开 HTTP 端口或混合端口（Clash 的“混合端口”同时提供两者），再打开系统代理开关。此时应用窗口本身和更新检查仍然正常，只有上面列的那些功能会直连。
+- **本机地址永远不走代理。** `localhost`、`127.0.0.1` 和本机的局域网地址会绕过代理，所以本地起的服务、局域网访问不会被代理拦住。
+- **已知限制：macOS 和 Linux 上从 Dock 或访达启动时，只写在 `~/.zshrc`、`~/.bashrc` 里的代理变量不会被读取。** 这是刻意的——代理地址里可能带账号密码，应用不从 shell 配置里继承这类变量。请改用系统代理设置，或者从终端启动应用。
+- **怎么确认生效了。** 应用每次启动都会在日志里写一行 `outbound proxy = ...`，例如 `outbound proxy = http://127.0.0.1:7890 (source: system, no_proxy: ...)`。`source` 是 `system` 表示用的是系统代理，`environment` 表示用的是你设的环境变量，`none` 表示直连。日志在应用数据目录的 `logs` 文件夹里，也可以用“导出诊断”把它打包出来。报告网络问题时请附上这一行。
+
 ## 在哪里下载和报告问题？
 
 从[项目下载页](https://www.dshdesktop.cn/)或[最新 GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest)下载安装包。遇到问题时先查看[用户指南的排查部分](user-guide.md#排查)，仍无法解决再提交 [GitHub Issue](https://github.com/anywhere-labs/deepseek-harness-desktop/issues/new/choose)，并附上操作系统、应用版本、复现步骤和错误信息。

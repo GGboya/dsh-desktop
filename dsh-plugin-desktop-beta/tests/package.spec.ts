@@ -521,6 +521,44 @@ describe('published package surface', () => {
     expect(main).not.toContain('disposeDshRuntime')
   })
 
+  it('installs the outbound proxy policy in both processes before anything can request', () => {
+    const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const launchEnv = main.indexOf('const desktopLaunchEnvironment = withDesktopDshHome')
+    const probe = main.indexOf('probe: await probeSystemProxy()')
+    const overlay = main.indexOf('const proxyResolution = buildDesktopProxyOverlay(')
+    const install = main.indexOf('await installProxyFromEnvironment(')
+    const own = main.indexOf('generation.own(() => { void releaseProxy() })')
+    const host = main.indexOf('await startIsolatedDesktopHost({')
+
+    // The overlay is built from the launch environment, so it cannot precede it; the installation
+    // has to beat the Host, which starts requesting as soon as its plugins mount.
+    expect(launchEnv).toBeGreaterThanOrEqual(0)
+    expect(overlay).toBeGreaterThan(launchEnv)
+    expect(probe).toBeGreaterThan(launchEnv)
+    expect(install).toBeGreaterThan(overlay)
+    expect(own).toBeGreaterThan(install)
+    expect(host).toBeGreaterThan(install)
+    // A summary is written on every start, including the direct one: a report that the application
+    // cannot reach the network is unanswerable without knowing which route it took.
+    expect(main).toContain('electronLogger.info(`${BIN_NAME}: ${proxyResolution.summary}`)')
+    expect(main).toContain('desktopProxyOverlay: proxyResolution.overlay')
+
+    const entry = readFileSync(new URL('src/host-process-entry.ts', packageRoot), 'utf8')
+    const hostInstall = entry.indexOf('releaseProxy = await installProxyFromEnvironment(')
+    const hostBoot = entry.indexOf('await bootDesktopHost(')
+    const hostRelease = entry.indexOf('await releaseProxy?.()')
+
+    // The Host installs its own: the global dispatcher, `proxyRouteFor`'s state, and the child
+    // environment are module-private per process, so the supervisor's installation never arrives.
+    expect(hostInstall).toBeGreaterThanOrEqual(0)
+    expect(hostBoot).toBeGreaterThan(hostInstall)
+    expect(hostRelease).toBeGreaterThanOrEqual(0)
+    // The supervisor already logged the route; a second copy of the URL only adds another place a
+    // user's pasted log can disagree with itself.
+    expect(entry).not.toContain('proxyResolution')
+    expect(entry).toContain('host outbound proxy policy installed')
+  })
+
   it('keeps the release-age override in the shared process-local pnpm policy', () => {
     const policy = readFileSync(new URL('src/pnpm-policy.ts', packageRoot), 'utf8')
     const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')

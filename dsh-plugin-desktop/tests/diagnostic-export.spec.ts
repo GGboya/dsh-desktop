@@ -35,7 +35,7 @@ function writeLifecycleEvidence(userDataDir: string): string {
     appVersion: APP_VERSION,
     platform: process.platform,
     arch: process.arch,
-    logger: { error() {}, errorCause() {} },
+    logger: { error() {}, errorCause() {}, info() {} },
     now: () => new Date('2026-08-19T00:00:00.000Z'),
     monotonicNow: () => {
       tick += 10

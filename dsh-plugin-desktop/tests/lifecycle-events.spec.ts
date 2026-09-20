@@ -37,6 +37,7 @@ function createLogger(): CapturedLogger {
   return {
     error: vi.fn<(message: string) => void>(),
     errorCause: vi.fn<(cause: unknown) => void>(),
+    info: vi.fn<(message: string) => void>(),
   }
 }
 
