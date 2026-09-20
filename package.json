@@ -15,8 +15,6 @@
     "dsh-community-market"
   ],
   "resolutions": {
-    "@deepseek-ai/cordis-plugin-loader@npm:1.0.3": "patch:@deepseek-ai/cordis-plugin-loader@npm%3A1.0.3#./patches/cordis-plugin-loader@1.0.3.patch",
-    "@deepseek-ai/cordis-plugin-loader@npm:^1.0.3": "patch:@deepseek-ai/cordis-plugin-loader@npm%3A1.0.3#./patches/cordis-plugin-loader@1.0.3.patch",
     "app-builder-lib@npm:26.15.7": "patch:app-builder-lib@npm%3A26.15.7#./patches/app-builder-lib@26.15.7.patch",
     "open@npm:11.0.1": "patch:open@npm%3A11.0.1#./patches/open@11.0.1.patch",
     "open@npm:^11.0.0": "patch:open@npm%3A11.0.1#./patches/open@11.0.1.patch",

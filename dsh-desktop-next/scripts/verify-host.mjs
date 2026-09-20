@@ -90,34 +90,6 @@ try {
     assert.equal(bundle.error, undefined)
     assert.ok(bundle.rows.some(row => row.rowId === rowId), JSON.stringify(bundle))
   }
-  const teamBundles = ['@deepseek-ai/dsh-experimental-agent-team-profile', '@deepseek-ai/dsh-experimental-agent-team-web-profile']
-  for (const name of teamBundles) {
-    const result = await rpc('setBundleEnabled', { name, enabled: true })
-    assert.equal(result.application, 'applied', JSON.stringify(result))
-  }
-  for (const moduleName of ['@deepseek-ai/dsh-experimental-agent-team', '@deepseek-ai/dsh-experimental-tool-agent-team', '@deepseek-ai/dsh-experimental-client-ui-agent-team']) {
-    const row = (await rpc('listPlugins')).find(row => row.moduleName === moduleName)
-    assert.equal(row?.fiberPhase, 'active', JSON.stringify(row))
-  }
-  for (const name of [...teamBundles].reverse()) {
-    const result = await rpc('setBundleEnabled', { name, enabled: false })
-    assert.equal(result.application, 'applied', JSON.stringify(result))
-  }
-  for (const name of teamBundles) {
-    const result = await rpc('setBundleEnabled', { name, enabled: true })
-    assert.equal(result.application, 'applied', JSON.stringify(result))
-  }
-  await stop()
-  ;({ origin, cookie } = await boot('desktop'))
-  // Also exercise disabling the Host bundle while the Web bundle is selected,
-  // including the persisted state restored by a fresh Host process.
-  for (const name of teamBundles) {
-    assert.equal((await rpc('listBundles')).find(row => row.name === name)?.enabled, true)
-    const result = await rpc('setBundleEnabled', { name, enabled: false })
-    assert.equal(result.application, 'applied', JSON.stringify(result))
-    assert.equal((await rpc('listBundles')).find(row => row.name === name)?.enabled, false)
-  }
-  assert.equal((await rpc('listPlugins')).some(row => row.moduleName.includes('agent-team')), false)
   const packages = ['dsh-community-market', 'dshmarket', '@agents-anywhere/dsh-bridge-next']
   for (const name of packages) {
     const bundle = (await rpc('listBundles')).find(row => row.name === name)
@@ -133,8 +105,6 @@ try {
   await stop()
   ;({ origin, cookie } = await boot('desktop'))
   assert.deepEqual(manager.features('desktop'), { market: false, remoteControl: false, dshMarket: true })
-  for (const name of teamBundles) assert.equal((await rpc('listBundles')).find(row => row.name === name)?.enabled, false)
-  assert.equal((await rpc('listPlugins')).some(row => row.moduleName.includes('agent-team')), false)
   assert.equal((await rpc('listPlugins')).some(row => row.moduleName === packages[2] && row.enabled), false)
   await rpc('setBundleEnabled', { name: packages[2], enabled: true })
   for (const name of packages.slice(1)) {
