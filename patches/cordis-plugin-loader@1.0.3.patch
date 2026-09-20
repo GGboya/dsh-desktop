@@ -1,0 +1,36 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -176,7 +176,7 @@
+ 	}
+ 	/** Return pending import and lifecycle tasks owned by this tree. */
+ 	getTasks() {
+-		return [...this.entries()].map((entry) => entry._initTask || entry.fiber?.inertia).filter(isNonNullable);
++		return [...this.entries()].flatMap((entry) => [...entry._disposeTasks, entry._initTask || entry.fiber?.inertia]).filter(isNonNullable);
+ 	}
+ 	/**
+ 	* Wait until this tree has no active import or lifecycle tasks.
+@@ -343,6 +343,7 @@
+ 	subtree;
+ 	_initTask;
+ 	_disposing = 0;
++	_disposeTasks = new Set();
+ 	constructor(loader) {
+ 		this.loader = loader;
+ 		this.ctx = loader.ctx.extend({ [Entry.key]: this });
+@@ -391,7 +392,14 @@
+ 		if (this.disabled) return;
+ 		await this.init();
+ 	}
+-	async _dispose(fiber = this.fiber) {
++	_dispose(fiber = this.fiber) {
++		// A removed entry loses its fiber before async cleanup has finished.
++		// Keep cleanup visible to tree.await() until the entry can be removed.
++		const task = this._disposeFiber(fiber);
++		this._disposeTasks.add(task);
++		return task.finally(() => { this._disposeTasks.delete(task); });
++	}
++	async _disposeFiber(fiber) {
+ 		if (!fiber) return;
+ 		if (this.fiber === fiber) this.fiber = void 0;
+ 		this._disposing += 1;
