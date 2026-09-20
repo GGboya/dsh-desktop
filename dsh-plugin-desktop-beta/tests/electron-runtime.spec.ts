@@ -181,6 +181,7 @@ const electron = vi.hoisted(() => {
     readonly restore = vi.fn()
     readonly show = vi.fn()
     readonly hide = vi.fn()
+    readonly minimize = vi.fn()
     readonly focus = vi.fn()
     readonly on = browserWindowOn
     readonly off = browserWindowOff
@@ -1573,6 +1574,36 @@ describe('Electron desktop runtime', () => {
     close(quittingCloseEvent)
     expect(quittingCloseEvent.preventDefault).not.toHaveBeenCalled()
     expect(window?.hide).toHaveBeenCalledOnce()
+
+    await release()
+  })
+
+  // `new Tray()` succeeds on Linux desktops that render no status area at all,
+  // so hiding the window there can strand a running Host with no way back.
+  it('minimizes instead of hiding when a Linux window is closed', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    const window = electron.browserWindows[0]
+    const close = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1]
+    expect(close).toEqual(expect.any(Function))
+
+    const closeEvent = { preventDefault: vi.fn() }
+    close(closeEvent)
+    expect(closeEvent.preventDefault).toHaveBeenCalledOnce()
+    expect(window?.minimize).toHaveBeenCalledOnce()
+    expect(window?.hide).not.toHaveBeenCalled()
+
+    // Quitting still tears the window down instead of leaving it minimized.
+    runtime.prepareToQuit()
+    const quittingCloseEvent = { preventDefault: vi.fn() }
+    close(quittingCloseEvent)
+    expect(quittingCloseEvent.preventDefault).not.toHaveBeenCalled()
+    expect(window?.minimize).toHaveBeenCalledOnce()
 
     await release()
   })

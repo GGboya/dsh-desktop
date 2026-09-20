@@ -367,6 +367,13 @@ export class ElectronShellGeneration {
       if (applicationNeedsReveal(window, platform.platform)) this.show()
     }
     const clearAttention = (): void => { this.clearAttention() }
+    // Closing the window must never strand the Host. Where the tray is
+    // guaranteed reachable the window hides; elsewhere it minimizes, which
+    // keeps every session running and leaves one reachable surface behind.
+    const dismissWindow = (): void => {
+      if (platform.hidesWindowOnClose) window.hide()
+      else window.minimize()
+    }
     let fullscreenExitPending = false
     let hideAfterFullscreenExit = false
     let restoreAfterFullscreenExit = false
@@ -380,7 +387,7 @@ export class ElectronShellGeneration {
       restoreAfterFullscreenExit = false
       if (window.isDestroyed()) return
       if (shouldHide) {
-        window.hide()
+        dismissWindow()
         return
       }
       if (shouldRestore) {
@@ -427,7 +434,7 @@ export class ElectronShellGeneration {
         window.setFullScreen(false)
         return
       }
-      window.hide()
+      dismissWindow()
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
     const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
