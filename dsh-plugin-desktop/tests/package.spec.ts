@@ -968,7 +968,12 @@ describe('published package surface', () => {
     expect(composition.fill).toBe('system-dark')
     expect(resources.mac.input).toBe('app-icon.icon')
     expect(manifest.files).toEqual(expect.arrayContaining(['build/app-icon.icon/**', 'build/app-icon.icns']))
-    for (const name of ['app-icon.png', 'app-icon-mac.png', 'app-icon.icns', 'app-icon.ico']) {
+    // `app-icon.ico` is deliberately excluded from the byte-exact pin. `yarn build`
+    // regenerates it on every platform, and its frames at or below 40px are
+    // rasterized from `tray-icon.svg`, so the bytes depend on the librsvg build
+    // that ships with sharp and legitimately differ between macOS and Windows.
+    // The ICO container is validated structurally by the exact-DPI frame test below.
+    for (const name of ['app-icon.png', 'app-icon-mac.png', 'app-icon.icns']) {
       const bytes = readFileSync(new URL(`build/${name}`, packageRoot))
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(resources.outputs[name])
     }

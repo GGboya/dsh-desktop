@@ -1039,11 +1039,53 @@ describe('published package surface', () => {
     expect(composition.fill).toBe('system-dark')
     expect(resources.mac.input).toBe('app-icon.icon')
     expect(manifest.files).toEqual(expect.arrayContaining(['build/app-icon.icon/**', 'build/app-icon.icns']))
-    for (const name of ['app-icon.png', 'app-icon-mac.png', 'app-icon.icns', 'app-icon.ico']) {
+    // `app-icon.ico` is deliberately excluded from the byte-exact pin. `yarn build`
+    // regenerates it on every platform, and its frames at or below 40px are
+    // rasterized from `tray-icon.svg`, so the bytes depend on the librsvg build
+    // that ships with sharp and legitimately differ between macOS and Windows.
+    // The ICO container is validated structurally by the exact-DPI frame test below.
+    for (const name of ['app-icon.png', 'app-icon-mac.png', 'app-icon.icns']) {
       const bytes = readFileSync(new URL(`build/${name}`, packageRoot))
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(resources.outputs[name])
     }
     expect(readFileSync(new URL('build/app-icon.icns', packageRoot)).subarray(0, 4).toString()).toBe('icns')
+  })
+
+  it('generates exact-DPI Windows application and installer icon frames', () => {
+    const icon = readFileSync(new URL('build/app-icon.ico', packageRoot))
+    const expectedSizes = [16, 20, 24, 28, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256]
+
+    expect(icon.readUInt16LE(0)).toBe(0)
+    expect(icon.readUInt16LE(2)).toBe(1)
+    expect(icon.readUInt16LE(4)).toBe(expectedSizes.length)
+
+    const entries = expectedSizes.map((expectedSize, index) => {
+      const offset = 6 + index * 16
+      const width = icon[offset] === 0 ? 256 : icon[offset]
+      const height = icon[offset + 1] === 0 ? 256 : icon[offset + 1]
+      const byteLength = icon.readUInt32LE(offset + 8)
+      const dataOffset = icon.readUInt32LE(offset + 12)
+      expect(width).toBe(expectedSize)
+      expect(height).toBe(expectedSize)
+      expect(icon.readUInt16LE(offset + 4)).toBe(1)
+      expect(icon.readUInt16LE(offset + 6)).toBe(32)
+      expect(dataOffset + byteLength).toBeLessThanOrEqual(icon.length)
+      return { size: expectedSize, byteLength, dataOffset }
+    })
+
+    for (const entry of entries.slice(0, -1)) {
+      expect(icon.readUInt32LE(entry.dataOffset)).toBe(40)
+      expect(icon.readInt32LE(entry.dataOffset + 4)).toBe(entry.size)
+      expect(icon.readInt32LE(entry.dataOffset + 8)).toBe(entry.size * 2)
+      expect(icon.readUInt16LE(entry.dataOffset + 12)).toBe(1)
+      expect(icon.readUInt16LE(entry.dataOffset + 14)).toBe(32)
+      expect(icon.readUInt32LE(entry.dataOffset + 16)).toBe(0)
+    }
+
+    const largest = entries.at(-1)
+    expect(largest).toBeDefined()
+    expect(icon.subarray(largest?.dataOffset, (largest?.dataOffset ?? 0) + 8))
+      .toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
   })
 
   it('generates a centered macOS icon with a 100-pixel visual inset', async () => {
