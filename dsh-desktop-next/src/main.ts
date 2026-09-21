@@ -76,7 +76,10 @@ const runtime = new NextDesktopRuntime({
     if (quitting) throw new Error('Desktop is shutting down')
     const snapshot = permissions.query(permission)
     // Host calls reveal the permission dialog; only a user click there may prompt the OS.
-    if (action === 'open-settings' || action === 'request' && snapshot.status !== 'granted' && (snapshot.canRequest || snapshot.canOpenSettings)) {
+    // Windows and Linux offer neither a programmatic request nor a settings deep link for most
+    // permissions, so gating on those capabilities left the Host's demand completely invisible
+    // there. The page still lists every permission with its status and guidance, so open it.
+    if (action === 'open-settings' || action === 'request' && snapshot.status !== 'granted') {
       openSettings('permissions')
     }
     return snapshot
