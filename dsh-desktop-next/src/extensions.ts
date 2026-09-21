@@ -8,7 +8,7 @@ import { composeEntries, loadOverlayPatches, readProfilePlugins, resolveBundleDi
 import { installNotifications } from './notifications.ts'
 import { HostPermissions } from './host-permissions.ts'
 import { NEXT_PACKAGE, profileName } from './profiles.ts'
-import { PNPM_IGNORE_MINIMUM_RELEASE_AGE } from './pnpm-policy.ts'
+import { withTrailingDesktopPnpmPolicy } from './pnpm-policy.ts'
 
 export const name = 'desktop-next-capabilities'
 export const inject = ['profileContext']
@@ -105,8 +105,7 @@ export function createPackageRunner(invocation: ProfilePnpmInvocation, directory
     run(argv: readonly string[], signal?: AbortSignal) {
       if (!argv.length) throw new Error('Invalid pnpm arguments')
       // The Host invocation also serves the official manager; apply its policy only once here.
-      const args = [...invocation.args, ...argv].filter(arg => arg !== PNPM_IGNORE_MINIMUM_RELEASE_AGE)
-      return start([...args, PNPM_IGNORE_MINIMUM_RELEASE_AGE], directory, signal)
+      return start(withTrailingDesktopPnpmPolicy([...invocation.args, ...argv]), directory, signal)
     },
     /** dshmarket uses the official CLI so installs/removals also reconcile Profile bundles. */
     runPlugin(argv: readonly string[], invokingDir: string, signal?: AbortSignal) {

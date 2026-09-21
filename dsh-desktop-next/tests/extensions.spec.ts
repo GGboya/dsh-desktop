@@ -2,7 +2,9 @@ import { once } from 'node:events'
 import { tmpdir } from 'node:os'
 import { afterEach, expect, it } from 'vitest'
 import { createPackageRunner } from '../src/extensions.ts'
-import { PNPM_IGNORE_MINIMUM_RELEASE_AGE } from '../src/pnpm-policy.ts'
+import { PNPM_IGNORE_MINIMUM_RELEASE_AGE, PNPM_RECONCILE_LOCKFILE } from '../src/pnpm-policy.ts'
+
+const POLICY = [PNPM_IGNORE_MINIMUM_RELEASE_AGE, PNPM_RECONCILE_LOCKFILE]
 
 const runners: ReturnType<typeof createPackageRunner>[] = []
 function runner() {
@@ -22,14 +24,14 @@ it.each([[false, false], [true, false], [false, true], [true, true]])(
   'passes the Desktop policy once with invocation=%s and caller=%s', async (invocationPolicy, callerPolicy) => {
     const manager = createPackageRunner({ command: process.execPath, env: {},
       args: ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', '--',
-        ...(invocationPolicy ? [PNPM_IGNORE_MINIMUM_RELEASE_AGE] : [])],
+        ...(invocationPolicy ? POLICY : [])],
     }, tmpdir())
     runners.push(manager)
-    const operation = manager.run([...(callerPolicy ? [PNPM_IGNORE_MINIMUM_RELEASE_AGE] : []), 'remove', 'fixture'])
+    const operation = manager.run([...(callerPolicy ? POLICY : []), 'remove', 'fixture'])
     let output = ''
     operation.stdout.on('data', chunk => { output += chunk })
     expect((await operation.done).exitCode).toBe(0)
-    expect(JSON.parse(output)).toEqual(['remove', 'fixture', PNPM_IGNORE_MINIMUM_RELEASE_AGE])
+    expect(JSON.parse(output)).toEqual(['remove', 'fixture', ...POLICY])
   },
 )
 
