@@ -78,7 +78,10 @@ const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
 const stableRuntimeVersion = (JSON.parse(readFileSync(
   new URL('dsh-plugin-desktop/package.json', workspaceRoot), 'utf8',
 )) as { dependencies: Record<string, string> }).dependencies['@deepseek-ai/dsh']
-const runtimeVersion = '0.1.6-alpha.2'
+// Derived, not hand-written: the beta channel's pinned core is the single source of
+// truth for every `patch:` selector asserted below, so a core bump does not require
+// editing an assertion that was already correct.
+const runtimeVersion = String(manifest.dependencies?.['@deepseek-ai/dsh'])
 const dshResolution = (name: string): unknown =>
   workspaceManifest.resolutions?.[`${name}@npm:${runtimeVersion}`]
 
@@ -229,7 +232,7 @@ describe('published package surface', () => {
   })
 
   it('patches the browse panel with the Windows native-picker icon bridge', () => {
-    const patchPath = './patches/dsh-client-ui-directory-picker-browse@0.1.6-alpha.2.patch'
+    const patchPath = `./patches/dsh-client-ui-directory-picker-browse@${runtimeVersion}.patch`
     expect(dshResolution('@deepseek-ai/dsh-client-ui-directory-picker-browse'))
       .toContain(patchPath)
     const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
@@ -253,7 +256,7 @@ describe('published package surface', () => {
   })
 
   it('patches the browse backend to skip unreadable directory-looking entries', () => {
-    const patchPath = './patches/dsh-host-directory-picker-browse@0.1.6-alpha.2.patch'
+    const patchPath = `./patches/dsh-host-directory-picker-browse@${runtimeVersion}.patch`
     expect(dshResolution('@deepseek-ai/dsh-host-directory-picker-browse'))
       .toContain(patchPath)
     const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
@@ -272,7 +275,7 @@ describe('published package surface', () => {
   })
 
   it('gives the Desktop settings section a dedicated display icon', () => {
-    const patchPath = './patches/dsh-client-ui-settings-general@0.1.6-alpha.2.patch'
+    const patchPath = `./patches/dsh-client-ui-settings-general@${runtimeVersion}.patch`
     expect(dshResolution('@deepseek-ai/dsh-client-ui-settings-general'))
       .toContain(patchPath)
     const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
@@ -291,7 +294,7 @@ describe('published package surface', () => {
   })
 
   it('keeps wide Markdown table scrollbars visible without hover', () => {
-    const patchPath = './patches/dsh-client-ui-primitives@0.1.6-alpha.2.patch'
+    const patchPath = `./patches/dsh-client-ui-primitives@${runtimeVersion}.patch`
     expect(dshResolution('@deepseek-ai/dsh-client-ui-primitives')).toContain(patchPath)
     const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
     const installedStyles = readFileSync(new URL(
@@ -311,23 +314,12 @@ describe('published package surface', () => {
     )
   })
 
-  it('retains the pre-alpha.2 settings helpers used by profile plugins', () => {
-    const patchPath = './patches/dsh-settings@0.1.6-alpha.2.patch'
-    expect(dshResolution('@deepseek-ai/dsh-settings')).toContain(patchPath)
-    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
-    const installedSettings = readFileSync(new URL(
-      'node_modules/@deepseek-ai/dsh-settings/lib/index.js',
-      packageRoot,
-    ), 'utf8')
-    for (const marker of [
-      'function settingsNamespace(value)',
-      'function installSettingsSection(ctx, ns, schema, entry, hooks)',
-      'settingsCtx.settings.installSection(ctx, ns, schema, entry, hooks)',
-    ]) {
-      expect(patch).toContain(marker)
-      expect(installedSettings).toContain(marker)
-    }
-  })
+  // The `dsh-settings` compatibility patch is not forward-ported to
+  // 0.1.7-alpha.1 and its lock test is retired with it. Upstream rewrote the
+  // settings package: `installSection` / `parseSettingsNamespace` are gone
+  // repository-wide and `SettingsProvider` became `SettingsForms`, so neither
+  // `settingsNamespace` nor `installSettingsSection` has a delegate left to
+  // forward to. See `patch-forward/DECISIONS.md` for the recorded downgrade.
 
   it('resolves both release channels through their recorded runtime families', () => {
     const dshResolutions = Object.entries(workspaceManifest.resolutions ?? {})
@@ -370,7 +362,7 @@ describe('published package surface', () => {
   })
 
   it('keeps the canonical web profile configurable while Desktop disables browser opening', () => {
-    const patchPath = './patches/dsh-web-app@0.1.6-alpha.2.patch'
+    const patchPath = `./patches/dsh-web-app@${runtimeVersion}.patch`
     const openPatchPath = './patches/open@11.0.1.patch'
     const openPatchResolution = `patch:open@npm%3A11.0.1#${openPatchPath}`
     expect(dshResolution('@deepseek-ai/dsh-web-app')).toContain(patchPath)
@@ -689,9 +681,11 @@ describe('published package surface', () => {
     const marketLegacyMirror = main.indexOf('await selectDesktopMarketProvider(marketUserDataDir, provider)', marketStateWrite)
     const deleteProfile = main.indexOf('await deleteDesktopProfile({')
     const clearPreferences = main.indexOf('await clearDesktopProfilePreferences(', deleteProfile)
-    const captureDesktop = main.indexOf('namespace !== DESKTOP_SETTINGS_NAMESPACE', marketLegacyMirror)
-    const captureNotifications = main.indexOf('namespace !== DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE', captureDesktop)
-    const captureFailure = main.indexOf('failed to capture active Profile settings', captureNotifications)
+    const captureObserver = main.indexOf('observeDesktopPreferenceSettings(ctx, fileExporter, enqueueProfilePreferencesWrite)', marketLegacyMirror)
+    const settingsBridge = readFileSync(new URL('src/settings-bridge.ts', packageRoot), 'utf8')
+    const captureDesktop = settingsBridge.indexOf('namespace !== DESKTOP_SETTINGS_ENTRY_ID')
+    const captureNotifications = settingsBridge.indexOf('namespace !== DESKTOP_NOTIFICATIONS_SETTINGS_ENTRY_ID', captureDesktop)
+    const captureFailure = settingsBridge.indexOf('failed to capture active Profile settings', captureNotifications)
 
     const aaController = main.indexOf('selectAa: async enabled => {')
     const aaWrite = main.slice(aaController, main.indexOf('readWeb:', aaController))
@@ -720,10 +714,12 @@ describe('published package surface', () => {
     expect(marketStateWrite).toBeGreaterThan(marketController)
     expect(marketLegacyMirror).toBeGreaterThan(marketStateWrite)
     expect(clearPreferences).toBeGreaterThan(deleteProfile)
+    expect(captureObserver).toBeGreaterThan(marketLegacyMirror)
+    expect(captureDesktop).toBeGreaterThanOrEqual(0)
     expect(captureNotifications).toBeGreaterThan(captureDesktop)
     expect(captureFailure).toBeGreaterThan(captureNotifications)
     expect(main.slice(deleteProfile, clearPreferences)).toContain('}, name)')
-    expect(main.slice(clearPreferences, captureDesktop)).toContain('deleted Profile left stale preference state')
+    expect(main.slice(clearPreferences, captureObserver)).toContain('deleted Profile left stale preference state')
   })
 
   it('wires lifecycle evidence through key startup stages and terminal outcomes', () => {
@@ -1286,7 +1282,7 @@ describe('published package surface', () => {
   // A patch whose filename does not match the pinned version degrades silently to the
   // unpatched tarball, so the wiring is asserted, not assumed.
   it('accepts the Electron desktop profile through the pinned dsh patch', () => {
-    const dshPatchPath = './patches/dsh@0.1.6-alpha.2.patch'
+    const dshPatchPath = `./patches/dsh@${runtimeVersion}.patch`
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
     const dshPatch = readFileSync(new URL(dshPatchPath, workspaceRoot), 'utf8')
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
@@ -1301,7 +1297,7 @@ describe('published package surface', () => {
   })
 
   it('hides official plugin-manager and general subprocess consoles on Windows', () => {
-    const subprocessPatchPath = './patches/dsh-subprocess-local@0.1.6-alpha.2.patch'
+    const subprocessPatchPath = `./patches/dsh-subprocess-local@${runtimeVersion}.patch`
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
     const dshManifest = workspaceRequire.resolve('@deepseek-ai/dsh/package.json')
@@ -1417,7 +1413,7 @@ describe('published package surface', () => {
     const processManifest = sandboxRequire.resolve('@deepseek-ai/dsh-win32-process/package.json')
     const installedRuntime = readFileSync(join(dirname(processManifest), 'lib/index.js'), 'utf8')
 
-    expect(existsSync(new URL('patches/dsh-win32-process@0.1.6-alpha.2.patch', workspaceRoot))).toBe(false)
+    expect(existsSync(new URL(`patches/dsh-win32-process@${runtimeVersion}.patch`, workspaceRoot))).toBe(false)
     expect(dshResolution('@deepseek-ai/dsh-win32-process')).not.toContain('patch:')
     expect(installedRuntime.match(/dwFlags: 257,/gu)).toHaveLength(2)
     expect(installedRuntime.match(/wShowWindow: 0,/gu)).toHaveLength(2)

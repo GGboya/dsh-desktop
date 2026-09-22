@@ -18,6 +18,7 @@ import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { installDesktopLaunchWorkspaceBridge } from './launch-workspace.ts'
+import { DESKTOP_SETTINGS_FORMS_SERVICE } from './settings-bridge.ts'
 import { installSidebarFooterStyles } from './sidebar-footer-styles.ts'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
@@ -112,7 +113,7 @@ export const inject = [
   'locale',
   'connection',
   'remote',
-  'settingsScope',
+  DESKTOP_SETTINGS_FORMS_SERVICE,
   'sessions',
   'theme',
   'uiRenderer',

@@ -60,7 +60,7 @@ import type {
 } from './lifecycle-events.ts'
 import { FileExporter } from './file-exporter.ts'
 import { installAgentErrorLogging } from './agent-error-logging.ts'
-import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
+import { observeDesktopPreferenceSettings } from './settings-bridge.ts'
 import {
   desktopLanBrowserUrls,
   desktopLoopbackBrowserUrl,
@@ -182,10 +182,6 @@ import {
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { desktopLocaleFromLanguageTag, desktopTrayLabel } from './tray-locale.ts'
 import { desktopNativeCopy } from './native-dialog-copy.ts'
-import {
-  DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
-  type DesktopNotificationSettings,
-} from './notifications.ts'
 import {
   desktopLaunchWorkspaceRequest,
   type DesktopLaunchWorkspaceRequest,
@@ -1778,29 +1774,7 @@ async function start(): Promise<void> {
         throw cause
       })
       generation.bindHost(ctx)
-      fileExporter?.setThreshold((ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)?.logLevel ?? 'info')
-      ctx.on('settings/updated', (namespace, next) => {
-        if (namespace === DESKTOP_SETTINGS_NAMESPACE) {
-          fileExporter?.setThreshold((next as DesktopSettings).logLevel)
-        }
-        if (namespace !== DESKTOP_SETTINGS_NAMESPACE
-          && namespace !== DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE) return
-        const write = enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
-          namespace === DESKTOP_SETTINGS_NAMESPACE
-            ? next as DesktopSettings
-            : ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings,
-          namespace === DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE
-            ? next as DesktopNotificationSettings
-            : ctx.settings.get(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE) as DesktopNotificationSettings,
-          current.market,
-          current.aaEnabled === true,
-        ))
-        void write.catch((cause: unknown) => {
-          ctx.logger.error(
-            `${BIN_NAME}: failed to capture active Profile settings: ${cause instanceof Error ? cause.message : String(cause)}`,
-          )
-        })
-      })
+      observeDesktopPreferenceSettings(ctx, fileExporter, enqueueProfilePreferencesWrite)
     }
     startupStage = 'renderer-startup'
     lifecycleRecorder.transitionStartupStage(startupStage)

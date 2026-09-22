@@ -1,12 +1,22 @@
 {
   "repository": "https://github.com/deepseek-ai/deepseek-harness",
-  "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887",
-  "version": "0.1.6-alpha.2",
+  "commit": "c36a83ff6bb95e3f82cf79f9be7c724270a8aa61",
+  "version": "0.1.7-alpha.1",
   "files": [
     {
       "upstream": "apps/desktop/src/host-process.ts",
       "local": "src/host-process.ts",
-      "upstreamSha256": "f46169be5638b815929fd267cf985af5da3d284dfc8874a797cdcd396d22389f"
+      "upstreamSha256": "b9f0e6d60e06d63ceded5d9de8c6d5883dcb3916a861fb15f4a6d3462df74bc4"
+    },
+    {
+      "upstream": "apps/desktop/src/browser-guests.ts",
+      "local": "src/browser-guests.ts",
+      "upstreamSha256": "5f3aa314d40c77a303436e834cc76df6cb8732b6a54b40a90495eadd69af59c2"
+    },
+    {
+      "upstream": "apps/desktop/src/preload-browser.ts",
+      "local": "src/preload-browser.ts",
+      "upstreamSha256": "17c386171796e77f6a2bfa3c86382a20cce36013275beca978f31b424ef25e9e"
     },
     {
       "upstream": "apps/desktop/src/node-environment.ts",
@@ -36,7 +46,7 @@
     {
       "upstream": "apps/desktop/tests/host-process.spec.ts",
       "local": "tests/host-process.spec.ts",
-      "upstreamSha256": "86ca6881707d8943c175ec95635003bcf6641e6fef17f8afb594b5765112a16a"
+      "upstreamSha256": "10f0379c95c0c6b51dfb0e6ca9c8f5ad1ea0125d69e8b0c188fe51a7e54393f0"
     },
     {
       "upstream": "apps/desktop/tests/node-environment.spec.ts",
@@ -46,7 +56,7 @@
     {
       "upstream": "apps/desktop/tests/web-document.spec.ts",
       "local": "tests/web-document.spec.ts",
-      "upstreamSha256": "63efaa30d991a4c95373a5d0b8c957afcf118d41a456387a14c7c32826050a79"
+      "upstreamSha256": "13631c62e957569e7d31b63e7baa554676f8915e260b5853bc49eb348a45cbbe"
     },
     {
       "upstream": "apps/desktop/tests/backend-controller.spec.ts",
@@ -61,7 +71,7 @@
     {
       "upstream": "apps/desktop/src/preload-platform.ts",
       "local": "src/preload-platform.ts",
-      "upstreamSha256": "4d97d27ee98d472c27be0efd5b90b52eebd61930e05d31d9f81634a36539204c"
+      "upstreamSha256": "ebcb8c921a16cc4b2aba61bf98329e5df7bcf13ffc55931736e88b422865335d"
     },
     {
       "upstream": "apps/desktop/src/preload-theme.ts",

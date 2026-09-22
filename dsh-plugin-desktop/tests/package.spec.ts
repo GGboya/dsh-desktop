@@ -636,9 +636,11 @@ describe('published package surface', () => {
     const marketLegacyMirror = main.indexOf('await selectDesktopMarketProvider(marketUserDataDir, provider)', marketStateWrite)
     const deleteProfile = main.indexOf('await deleteDesktopProfile({')
     const clearPreferences = main.indexOf('await clearDesktopProfilePreferences(', deleteProfile)
-    const captureDesktop = main.indexOf('namespace !== DESKTOP_SETTINGS_NAMESPACE', marketLegacyMirror)
-    const captureNotifications = main.indexOf('namespace !== DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE', captureDesktop)
-    const captureFailure = main.indexOf('failed to capture active Profile settings', captureNotifications)
+    const captureObserver = main.indexOf('observeDesktopPreferenceSettings(ctx, fileExporter, enqueueProfilePreferencesWrite)', marketLegacyMirror)
+    const settingsBridge = readFileSync(new URL('src/settings-bridge.ts', packageRoot), 'utf8')
+    const captureDesktop = settingsBridge.indexOf('namespace !== DESKTOP_SETTINGS_ENTRY_ID')
+    const captureNotifications = settingsBridge.indexOf('namespace !== DESKTOP_NOTIFICATIONS_SETTINGS_ENTRY_ID', captureDesktop)
+    const captureFailure = settingsBridge.indexOf('failed to capture active Profile settings', captureNotifications)
 
     const aaController = main.indexOf('selectAa: async enabled => {')
     const aaWrite = main.slice(aaController, main.indexOf('readWeb:', aaController))
@@ -667,10 +669,12 @@ describe('published package surface', () => {
     expect(marketStateWrite).toBeGreaterThan(marketController)
     expect(marketLegacyMirror).toBeGreaterThan(marketStateWrite)
     expect(clearPreferences).toBeGreaterThan(deleteProfile)
+    expect(captureObserver).toBeGreaterThan(marketLegacyMirror)
+    expect(captureDesktop).toBeGreaterThanOrEqual(0)
     expect(captureNotifications).toBeGreaterThan(captureDesktop)
     expect(captureFailure).toBeGreaterThan(captureNotifications)
     expect(main.slice(deleteProfile, clearPreferences)).toContain('}, name)')
-    expect(main.slice(clearPreferences, captureDesktop)).toContain('deleted Profile left stale preference state')
+    expect(main.slice(clearPreferences, captureObserver)).toContain('deleted Profile left stale preference state')
   })
 
   it('wires lifecycle evidence through key startup stages and terminal outcomes', () => {
