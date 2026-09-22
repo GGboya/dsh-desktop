@@ -27,7 +27,7 @@ corepack yarn workspace dsh-desktop-next verify:host:electron
 
 CI 还会在 Linux 中运行 `xvfb-run --auto-servernum corepack yarn workspace dsh-desktop-next verify:protocol --no-sandbox`。此独立测试使用真实 Electron 渲染进程、自定义协议和临时 Host，在关闭普通浏览器访问时验证市场源操作，并拒绝其他页面来源的请求。它不属于跨平台的 `check:next` 命令；关闭沙箱的参数仅用于这个隔离的 CI 进程。
 
-同一 Linux/Xvfb 环境中的 `verify:sidebar-browser --no-sandbox` 使用同时返回 `frame-ancestors 'none'` 和 `X-Frame-Options: DENY` 的本地测试页，验证 iframe 被拦截、真实 `WebContentsView` 成功加载、应用 Cookie 与 preload 隔离、原生历史、页内导航、显隐及释放。跨平台的 `verify:window-controls` 则通过模拟原生接口检查官方工具栏、分栏缩放、弹窗遮挡、标签切换与关闭，并验证普通 Web 客户端仍使用 iframe。
+同一 Linux/Xvfb 环境中的 `verify:sidebar-browser --no-sandbox` 使用同时返回 `frame-ancestors 'none'` 和 `X-Frame-Options: DENY` 的本地测试页，验证 iframe 被拦截、凭租约挂载的真实访客页成功加载、访客自身的安全设置、应用 Cookie 与 preload 隔离、原生历史、伪造租约被拒、工作区分区隔离，以及释放后的清理。跨平台的 `verify:window-controls` 则通过模拟原生接口检查官方工具栏、分栏缩放、弹窗遮挡、标签切换与关闭，并验证普通 Web 客户端仍使用 iframe。
 
 macOS 侧栏和标题栏回归检查会用临时数据目录，在无界面的 Chromium 中运行官方前端的 Desktop 启动分支。测试使用与 Next 相同的入口文档，通过模拟的 preload 接口提供真实 Host 注入，并断言已进入 Desktop 传输模式；随后验证选择工作区之前与创建真实空白会话之后复用同一套官方顶栏，首页及插件列表／详情页可重新展开侧栏，透明拖动区域保持固定而插件标题按原样滚动，控件滚入拖动区域后仍可点击。测试还会打开官方设置中的“桌面设置”分区，验证设置和 Profile 操作，并在没有 Host 依赖时渲染独立恢复窗口的实际构建产物。这些浏览器检查使用模拟的原生 IPC。构建后，首次安装测试浏览器并运行：
 

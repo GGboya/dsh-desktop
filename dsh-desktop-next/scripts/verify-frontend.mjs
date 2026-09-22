@@ -24,12 +24,20 @@ for (const platform of ['darwin', 'win32', 'linux']) {
   const userActivation = { isActive: false }
   for (const [entry, hostname] of [['preload-app.cjs', 'app'], ['preload-shell.cjs', 'shell']]) {
     const listeners = new Map()
+    // The shared map answers the per-platform assertions below; this one records a single entry,
+    // so the shell can be held to what it exposes on its own rather than what the app left behind.
+    const own = new Map()
     let requestedPage = 'general'
     runInNewContext(readFileSync(join(root, 'lib', entry), 'utf8'), {
       require: name => {
         assert.equal(name, 'electron', 'Sandboxed preloads may not require local chunks or Node modules')
-        return { contextBridge: { exposeInMainWorld: (name, api) => exposed.set(name, api) }, ipcRenderer: {
-          invoke: (...args) => { invocations.push(args); return Promise.resolve(args[0] === 'dsh-next:settings-take' ? requestedPage : undefined) }, send() {},
+        return { contextBridge: { exposeInMainWorld: (name, api) => { exposed.set(name, api); own.set(name, api) } }, ipcRenderer: {
+          invoke: (...args) => {
+            invocations.push(args)
+            if (args[0] === 'dsh-next:settings-take') return Promise.resolve(requestedPage)
+            if (args[0] === 'dsh-next:browser-acquire') return Promise.resolve({ lease: 'lease-1', partition: 'partition-1' })
+            return Promise.resolve(undefined)
+          }, send() {},
           on: (channel, listener) => listeners.set(channel, listener), removeListener: channel => listeners.delete(channel),
         } }
       },
@@ -39,17 +47,23 @@ for (const platform of ['darwin', 'win32', 'linux']) {
       navigator: { userActivation },
     }, { filename: entry })
     if (hostname === 'app') {
-      const sidebar = exposed.get('desktopNext').sidebarBrowser
-      await sidebar.command({ type: 'open', id: 'smoke' })
-      assert.equal(invocations.at(-1)[0], 'dsh-next:sidebar-browser')
-      const browserStates = []
-      const stopBrowser = sidebar.subscribe((...args) => browserStates.push(args))
-      const state = { id: 'smoke', revision: 1, url: 'https://example.com/' }
-      listeners.get('dsh-next:sidebar-browser-state')({ privilegedEvent: true }, state)
-      assert.equal(browserStates[0].length, 1, 'The Electron event must never cross the bridge')
-      assert.equal(browserStates[0][0], state)
+      // dsh 0.1.7 drives the native Sidebar browser itself off this carrier.
+      const browser = exposed.get('dshDesktop').browser
+      assert.deepEqual(await browser.acquire('/workspace/one'), { lease: 'lease-1', partition: 'partition-1' })
+      assert.deepEqual([...invocations.at(-1)], ['dsh-next:browser-acquire', '/workspace/one'])
+      const opened = []
+      const stopBrowser = browser.onOpenRequested('lease-1', url => opened.push(url))
+      const deliver = listeners.get('dsh-next:browser-open-requested')
+      deliver({ privilegedEvent: true }, { lease: 'lease-1', url: 'https://example.com/' })
+      assert.deepEqual(opened, ['https://example.com/'], 'An approved guest link reaches its own lease')
+      deliver({ privilegedEvent: true }, { lease: 'lease-2', url: 'https://example.com/other' })
+      deliver({ privilegedEvent: true }, { lease: 'lease-1', url: 42 })
+      assert.deepEqual(opened, ['https://example.com/'], 'Foreign leases and malformed requests are ignored')
       stopBrowser()
-      assert.equal(listeners.has('dsh-next:sidebar-browser-state'), false)
+      deliver({ privilegedEvent: true }, { lease: 'lease-1', url: 'https://example.com/after' })
+      assert.deepEqual(opened, ['https://example.com/'], 'Unsubscribing stops delivery')
+      await browser.release('lease-1')
+      assert.deepEqual([...invocations.at(-1)], ['dsh-next:browser-release', 'lease-1'])
       const received = []
       const stop = exposed.get('desktopNext').onOpenSettings(page => received.push(page))
       await new Promise(resolve => setTimeout(resolve, 0))
@@ -65,8 +79,8 @@ for (const platform of ['darwin', 'win32', 'linux']) {
       stop()
       assert.equal(listeners.has('dsh-next:settings-open'), false)
     } else {
-      assert.equal(exposed.get('desktopNext').onOpenSettings, undefined)
-      assert.equal(exposed.get('desktopNext').sidebarBrowser, undefined)
+      assert.equal(own.get('desktopNext').onOpenSettings, undefined)
+      assert.equal(own.has('dshDesktop'), false, 'Only the application document may reach guest browsers')
     }
   }
   assert.equal(dataset.platform, platform)
@@ -85,4 +99,4 @@ for (const platform of ['darwin', 'win32', 'linux']) {
   await permissions.openSettings('screen')
   assert.deepEqual([...invocations.at(-1)], ['dsh-next:permission-settings', 'screen'])
 }
-console.log('Next frontend check passed: official alpha.2 entry and independent sandboxed preloads for macOS, Windows and Linux.')
+console.log('Next frontend check passed: official 0.1.7-alpha.1 entry and independent sandboxed preloads for macOS, Windows and Linux.')

@@ -33,10 +33,13 @@ vi.mock('node:fs/promises', async importOriginal => ({
   },
   readFile: async () => { throw missing() },
 }))
-vi.mock('@deepseek-ai/dsh-native-command', () => ({
+vi.mock('@deepseek-ai/dsh-native-command', async importOriginal => ({
   canOpenNativePath: () => true,
   openNativePath: async () => { throw new Error('This test must only use the captured editor launcher') },
   runNativeCommand: async () => { throw missing() },
+  // dsh 0.1.7 resolves Linux desktop entries through this helper. It is pure path
+  // arithmetic, so the real one is used while every command-running export stays stubbed.
+  desktopDataDirectories: (await importOriginal<typeof import('@deepseek-ai/dsh-native-command')>()).desktopDataDirectories,
 }))
 
 beforeEach(() => {

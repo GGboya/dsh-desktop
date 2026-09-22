@@ -4,7 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { BundleInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
-import { Button, IconSettingsOutline16, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconSettingsOutlineRegular, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Choice, MARKET_OPTIONS, marketBody, marketTitle } from '../../../dsh-plugin-desktop-beta/src/client/DesktopSettingsSection.tsx'
 import { en as desktopEn, zh as desktopZh, type DesktopSettingsLocaleKey } from '../../../dsh-plugin-desktop-beta/src/client/desktop-settings-locales.ts'
 import { ComputerUseSettings } from './computer-use.tsx'
@@ -99,7 +99,7 @@ function PluginControls({ context, t: translate }: PropsLocale<'desktop-next'> &
       <section className="dshDesktopSettingsGroup" data-next-remote-control aria-labelledby="next-remote-title">
         <div className="dshNextPluginHeading"><h3 id="next-remote-title">{t('远程控制', 'Remote control')}</h3>
           <div className="dshNextPluginActions">
-            <Button variant="ghost" size="sm" className="dshNextSettingsGear" icon={<IconSettingsOutline16 />}
+            <Button variant="ghost" size="sm" className="dshNextSettingsGear" icon={<IconSettingsOutlineRegular />}
               aria-label={t('远程控制设置', 'Remote control settings')} title={remote?.enabled ? t('远程控制设置', 'Remote control settings') : t('启用远程控制后打开设置', 'Enable remote control to open settings')}
               disabled={!remote?.enabled || loading || busy} onClick={openRemoteSettings} />
             <Switch label={t('启用远程控制', 'Enable remote control')} checked={remote?.enabled ?? false} disabled={locked(remote)} onChange={enabled => { void change(REMOTE, enabled) }} />

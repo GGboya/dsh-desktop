@@ -37,7 +37,7 @@ if (process.platform === 'linux') {
   chooserEnv.DISPLAY = process.env.DISPLAY ?? ':0'
 }
 const host = new DesktopHostProcess(process.execPath, root, manager.directory('desktop'), undefined,
-  { ...process.env, ...chooserEnv, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, undefined, undefined, 'runtime', undefined,
+  { ...process.env, ...chooserEnv, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, undefined, undefined, undefined,
   join(root, 'lib', 'host.js'))
 let browser
 let page
@@ -109,10 +109,6 @@ try {
   })
   await context.addInitScript(() => {
     window.desktopNext = { state: () => window.__nextTestState(), browserLinks: () => window.__nextTestBrowserLinks(), command: command => window.__nextTestCommand(command) }
-    window.desktopNext.sidebarBrowser = {
-      command: request => window.__nextBrowserCommand(request),
-      subscribe: listener => { window.__nextBrowserEmit = listener; return () => { delete window.__nextBrowserEmit } },
-    }
     window.desktopNext.onOpenSettings = listener => {
       window.__nextTestOpenSettings = listener
       return () => { delete window.__nextTestOpenSettings }
@@ -126,17 +122,23 @@ try {
   // Serve the Desktop document without the browser Host's inline injections.
   // The published entry must request them through its Desktop boot contract.
   await context.route(streamBaseUrl + '/', route => route.fulfill({ contentType: 'text/html', body: desktopDocument }))
-  await context.addInitScript(payload => {
+  // Desktop answers this contract from the running Host, not from the table captured at startup:
+  // dsh 0.1.7 addresses boot bundles by revision and republishes the table whenever a plugin
+  // registers, so a reload that replays the startup table requests bundles that no longer exist.
+  await context.exposeFunction('__nextTestBootPayload', async () => ({ injections: await host.collectInjections(), streamBaseUrl }))
+  await context.addInitScript(() => {
     globalThis.__NEXT_TEST_BOOT__ = { calls: 0, failures: [] }
-    globalThis.dshDesktop = { protocolVersion: 1 }
+    // dsh 0.1.7 reads the native browser transport off this carrier; the bridge comes from
+    // `browserFixture`, whose init script already ran.
+    globalThis.dshDesktop = { protocolVersion: 1, browser: globalThis.__nextBrowserBridge }
     globalThis.dshDesktopBoot = {
-      ready: async () => { globalThis.__NEXT_TEST_BOOT__.calls++; return payload },
+      ready: async () => { globalThis.__NEXT_TEST_BOOT__.calls++; return window.__nextTestBootPayload() },
       failed: async message => { globalThis.__NEXT_TEST_BOOT__.failures.push(message) },
     }
     const mark = () => { document.documentElement.dataset.platform = 'darwin' }
     if (document.documentElement) mark()
     else document.addEventListener('DOMContentLoaded', mark, { once: true })
-  }, { injections: ready.injections, streamBaseUrl })
+  })
   page = await context.newPage()
   page.setDefaultTimeout(15_000)
   const errors = []
@@ -156,7 +158,11 @@ try {
   await page.getByRole('button', { name: /^(继续|Continue)$/ }).waitFor({ state: 'visible' })
   assert.equal(await dragRegion(), 'no-drag', 'Modal surfaces must not expose window drag regions')
   await page.getByRole('button', { name: /^(继续|Continue)$/ }).click()
-  await page.getByRole('button', { name: /^(稍后配置|Configure later)$/ }).click()
+  // 0.1.7 ships a default model, so the welcome notice is the only blocking first-run step.
+  // Earlier cores also forced a model credential dialog; dismiss it when a core still shows one.
+  const later = page.getByRole('button', { name: /^(稍后配置|Configure later|添加 API Key|Add API key)$/ })
+  await later.click({ timeout: 2_000 }).catch(() => {})
+  await page.locator('[aria-modal=true]').waitFor({ state: 'hidden' })
   await drag.waitFor({ state: 'visible' })
   // Simulate multiple extension entries in the official footer seat and check real geometry.
   const footer = page.locator('[data-slot="sidebar.footer.action"]')
@@ -207,8 +213,19 @@ try {
     await reopen.waitFor({ state: 'hidden' })
     await collapse.waitFor({ state: 'visible' })
   }
-  // No Workspace/Session yet: reuse the official header frame and both native controls.
-  assert.equal(await page.locator('[data-conversation-empty-header]').count(), 1)
+  // 0.1.7 added `settings.launcher`, and the account plugin takes that seat, which suppresses
+  // the labelled `settings.trigger` fallback button. Settings then lives in the launcher menu,
+  // always as its first entry, so the entry is reached positionally rather than by label.
+  const openSettingsPanel = async (root = page) => {
+    const labelled = root.getByRole('button', { name: /^(设置|Settings)$/ })
+    if (await labelled.count() > 0) { await labelled.click(); return }
+    await root.locator('[data-slot="settings.launcher"] button').first().click()
+    await root.getByRole('menu').getByRole('menuitem').first().click()
+  }
+  // No Workspace picked yet: reuse the official header frame and both native controls.
+  // 0.1.7 always mounts the persistent header and opens on a blank Session, so the frame is
+  // identified by its own marker instead of the removed unbound-only empty-header marker.
+  assert.equal(await page.locator('[data-conversation-header]').count(), 1)
   assert.equal(await page.locator('[data-conversation-header-leading]').count(), 1)
   await checkDrag()
   await collapse.click()
@@ -267,7 +284,7 @@ try {
   assert.equal(await communityChoice.getAttribute('aria-checked'), 'false')
   assert.equal(await remote.isChecked(), true)
   await marketFooter.waitFor({ state: 'hidden' })
-  await page.getByRole('button', { name: /^(设置|Settings)$/ }).click()
+  await openSettingsPanel()
   await page.getByRole('dialog').getByRole('button', { name: /^(插件市场|Plugin Market)$/ }).waitFor()
   await page.getByRole('button', { name: /^(关闭|Close)$/ }).click()
   await communityChoice.click({ position: { x: 10, y: 10 } })
@@ -354,8 +371,10 @@ try {
   const checkPluginReopen = async () => {
     await reopen.waitFor({ state: 'visible' })
     await page.waitForFunction(() => Number.parseFloat(getComputedStyle(document.querySelector('[data-shell-overlay]').parentElement).gridTemplateColumns) === 0)
-    assert.equal(await page.locator('[data-sidebar-header-controls] button').count(), 1,
-      'Plugins exposes only the official sidebar toggle, without a new-session action')
+    // dsh 0.1.7 moved the occupant out of the per-page `plugins.header.leading` seat into the
+    // frame's `shell.leading` seat, which renders both controls whatever page is showing.
+    assert.equal(await page.locator('[data-sidebar-header-controls] button').count(), 2,
+      'Plugins reuses the frame window-chrome seat with both sidebar and new-session controls')
     const geometry = await reopen.evaluate(button => {
       const box = button.getBoundingClientRect()
       return { x: box.x, y: box.y, width: box.width, height: box.height,
@@ -363,7 +382,9 @@ try {
         clickable: button.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)),
         region: getComputedStyle(button).getPropertyValue('-webkit-app-region') }
     })
-    assert.deepEqual(geometry, { x: 88, y: 12, width: 28, height: 28,
+    // 0.1.7 positions that seat itself (`.leadingSeat` at top 11px / left 88px), so the seat's own
+    // offset now decides the placement instead of Desktop's `[data-plugin-sidebar-control]` rule.
+    assert.deepEqual(geometry, { x: 88, y: 11, width: 28, height: 28,
       inPageHeader: false, clickable: true, region: 'no-drag' },
     'The official toggle stays beside the native traffic lights, independently of the centered content and scrolling')
   }
@@ -396,7 +417,11 @@ try {
   const titleBox = await pluginHeader.getByRole('heading', { level: 1 }).boundingBox()
   const contentBox = await controls.boundingBox()
   assert.ok(Math.abs(titleBox.x - contentBox.x) < 1, 'The official plugin title stays aligned with its content')
-  assert.equal(titleBox.y, 28, 'The caption must preserve the official title position')
+  // 0.1.7 pads the official plugin page head by `--dsh-frame-top-clearance` (48px on darwin),
+  // so the title now clears the caption band instead of scrolling underneath it.
+  const frameClearance = await page.evaluate(() =>
+    Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dsh-frame-top-clearance')) || 0)
+  assert.equal(titleBox.y, 28 + frameClearance, 'The caption must preserve the official title position')
   await page.setViewportSize({ width: 1800, height: 840 })
   await checkPluginCaption()
   assert.ok(Math.abs((await pluginHeader.getByRole('heading', { level: 1 }).boundingBox()).x - (await controls.boundingBox()).x) < 1,
@@ -467,7 +492,6 @@ try {
   // Selecting a real temporary Workspace mounts the normal strict-Session header.
   const emptyHeaderClass = await page.locator('[data-conversation-header]').getAttribute('class')
   await page.getByRole('button', { name: /^(选择工作区|Select workspace)$/ }).click()
-  await page.locator('[data-conversation-empty-header]').waitFor({ state: 'hidden' })
   await page.locator('[data-conversation-header]').waitFor()
   assert.equal(await page.locator('[data-conversation-header]').getAttribute('class'), emptyHeaderClass,
     'The unbound and blank Session states share the exact official header frame')
@@ -486,7 +510,7 @@ try {
     await reopen.waitFor({ state: 'hidden' })
   }
   await page.evaluate(() => { document.documentElement.dataset.platform = 'darwin' })
-  await page.getByRole('button', { name: /^(设置|Settings)$/ }).click()
+  await openSettingsPanel()
   // Native shortcuts appear on every official Settings section, like the original Desktop.
   const actions = page.locator('.dshDesktopNativeActions[data-placement="settings"]')
   await actions.getByRole('button', { name: /^(打开 DSH 终端|Open DSH Terminal)$/ }).click()
@@ -510,7 +534,7 @@ try {
   await page.locator('[data-plugin-panel]').waitFor({ state: 'visible' })
   await controls.waitFor({ state: 'visible' })
   assert.equal(await context.pages().length, 1, 'Leaving Settings for Plugins must reuse the main window')
-  await page.getByRole('button', { name: /^(设置|Settings)$/ }).click()
+  await openSettingsPanel()
   await page.getByRole('button', { name: /^(桌面设置|Desktop settings)$/ }).click()
   await settings.getByRole('heading', { name: /^(DSH Desktop 设置|DSH Desktop Settings)$/ }).waitFor()
   assert.equal(await settings.locator('nav').count(), 0)
@@ -673,9 +697,13 @@ try {
   assert.deepEqual(recoveryErrors, [])
   await recoveryPage.close()
   controlState.safeMode = true
+  // A reload re-runs the Desktop boot contract, which must pick up the Host's current boot table.
   await page.reload()
   await page.locator('.dshNextSafeModeNotice').waitFor({ state: 'visible' })
-  await page.getByRole('button', { name: /^(稍后配置|Configure later)$/ }).click()
+  assert.equal(await page.evaluate(() => globalThis.__NEXT_TEST_BOOT__.calls), 1)
+  // 0.1.7 ships a default model and remembers the dismissal, so the reloaded document usually has
+  // no credential step left; older cores show one again and it has to be cleared before the notice.
+  await page.getByRole('button', { name: /^(稍后配置|Configure later)$/ }).click({ timeout: 2_000 }).catch(() => {})
   await page.locator('.dshNextSafeModeNotice').getByRole('button', { name: /打开恢复助手|Open recovery assistant/ }).click()
   assert.deepEqual(controlCommands.at(-1), { type: 'controls', page: 'recovery' })
   await page.locator('.dshNextSafeModeNotice').getByRole('button', { name: /关闭提示|Dismiss notice/ }).click()
@@ -687,7 +715,7 @@ try {
   webPage.setDefaultTimeout(15_000)
   await webPage.goto(streamBaseUrl)
   await webPage.getByRole('button', { name: /^(稍后配置|Configure later)$/ }).click()
-  await webPage.getByRole('button', { name: /^(设置|Settings)$/ }).click()
+  await openSettingsPanel(webPage)
   assert.equal(await webPage.locator('.dshDesktopNativeActions').count(), 0)
   assert.equal(await webPage.getByRole('button', { name: /^(桌面设置|Desktop settings)$/ }).count(), 0)
   assert.equal(await webPage.evaluate(() => window.desktopNext === undefined), true)
@@ -704,7 +732,7 @@ try {
   await webContext.close()
   assert.deepEqual(errors, [])
   assert.deepEqual(await page.evaluate(() => globalThis.__NEXT_TEST_BOOT__.failures), [])
-  console.log('Next window controls passed through the official alpha.2 Desktop boot branch: stacked sidebar extension entries, homepage/plugin collapse and reopen, navigation, caption geometry, clickable actions, existing-header and platform isolation, official Settings header shortcuts and keyboard navigation, grouped Desktop Settings and immediate saves, per-address login URL rows with exact open/copy targets, Profile cards and tray creation, the Host-independent recovery artifact, and native Browser toolbar, navigation, pane geometry, overlay isolation, tab lifetime and Web iframe fallback. Chromium simulates the preload contract; native Electron window movement and page loading are not tested here.')
+  console.log('Next window controls passed through the official 0.1.7-alpha.1 Desktop boot branch: stacked sidebar extension entries, homepage/plugin collapse and reopen, navigation, caption geometry, clickable actions, existing-header and platform isolation, official Settings header shortcuts and keyboard navigation, grouped Desktop Settings and immediate saves, per-address login URL rows with exact open/copy targets, Profile cards and tray creation, the Host-independent recovery artifact, and native Browser toolbar, navigation, pane geometry, overlay isolation, tab lifetime and Web iframe fallback. Chromium simulates the preload contract; native Electron window movement and page loading are not tested here.')
   console.log(`Screenshots: ${screenshots}`)
 } catch (error) {
   console.error(error)

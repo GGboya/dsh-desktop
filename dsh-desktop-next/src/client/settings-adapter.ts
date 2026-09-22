@@ -1,8 +1,11 @@
 /** Adapt Next's native state to the existing Desktop settings components. */
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { DesktopSettingsApi, DesktopSettingsView } from '../../../dsh-plugin-desktop-beta/src/client/desktop-settings-api.ts'
 import type { DesktopNotificationSettings, DesktopShellSettings } from '../../../dsh-plugin-desktop-beta/src/client/DesktopSettingsSection.tsx'
 import { DEFAULT_PROFILE, type DesktopBridge, type DesktopBrowserLinks, type DesktopCommand, type DesktopPreferences, type DesktopState } from '../desktop-contract.ts'
+
+/** The part of a dsh `ConfigForm` the Desktop settings components read and write. */
+type DesktopConfigForm<T> = Pick<ConfigForm<T>, 'getSnapshot' | 'subscribe' | 'set'>
 
 const shellFields = { macosMaterial: 'macosMaterial', windowsMaterial: 'windowsMaterial', linuxMaterial: 'linuxMaterial', port: 'port', openBrowser: 'browserAccess', networkExposure: 'networkExposure', logLevel: 'logLevel' } as const
 const notificationFields = { enabled: 'notifications', notifyOnTurnCompletion: 'turnCompleted', notifyOnTurnFailure: 'turnFailed', notifyOnJobCompletion: 'jobCompleted', notifyOnJobFailure: 'jobFailed' } as const
@@ -27,16 +30,18 @@ export class NextSettingsAdapter {
   private listeners = new Set<() => void>()
   private tail: Promise<unknown> = Promise.resolve()
   private reading: Promise<DesktopState> | undefined
-  private shellSnapshot: SettingsScopeSnapshot<DesktopShellSettings> = this.snapshot()
-  private notificationSnapshot: SettingsScopeSnapshot<DesktopNotificationSettings> = this.snapshot()
+  private shellSnapshot: ConfigFormSnapshot<DesktopShellSettings> = this.snapshot()
+  private notificationSnapshot: ConfigFormSnapshot<DesktopNotificationSettings> = this.snapshot()
   constructor(readonly bridge: DesktopBridge) {}
 
   getSnapshot = (): DesktopState | undefined => this.current
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
-  readonly desktopSettings = { getSnapshot: () => this.shellSnapshot, subscribe: this.subscribe, set: (field: string, value: unknown) => this.setField(shellFields, field, value) }
-  readonly notificationSettings = { getSnapshot: () => this.notificationSnapshot, subscribe: this.subscribe, set: (field: string, value: unknown) => this.setField(notificationFields, field, value) }
+  // Declared against ConfigForm so a future change to its write contract fails here
+  // rather than silently at the Desktop settings components that consume these forms.
+  readonly desktopSettings: DesktopConfigForm<DesktopShellSettings> = { getSnapshot: () => this.shellSnapshot, subscribe: this.subscribe, set: (field: string, value: unknown) => this.setField(shellFields, field, value) }
+  readonly notificationSettings: DesktopConfigForm<DesktopNotificationSettings> = { getSnapshot: () => this.notificationSnapshot, subscribe: this.subscribe, set: (field: string, value: unknown) => this.setField(notificationFields, field, value) }
 
-  private snapshot<T>(value?: T, writable = false): SettingsScopeSnapshot<T> {
+  private snapshot<T>(value?: T, writable = false): ConfigFormSnapshot<T> {
     return { status: value ? 'ready' : 'loading', value, base: undefined, user: undefined, revision: undefined, writable, mode: 'host' }
   }
   refresh = (): Promise<DesktopState> => this.reading ??= this.bridge.state().then(state => {
@@ -68,10 +73,15 @@ export class NextSettingsAdapter {
     if (!preferences.browserAccess) preferences.networkExposure = 'loopback'
     try { await this.bridge.command({ type: 'preferences', preferences }) } finally { await this.settle() }
   })
-  private setField(fields: Record<string, keyof DesktopPreferences>, field: string, value: unknown): Promise<void> {
+  /**
+   * dsh 0.1.7's ConfigForm.set resolves true for Host acceptance and false for a
+   * refused or skipped write; this bridge has no refusal path — a rejected save
+   * rejects here — so a settled save is always an acceptance.
+   */
+  private setField(fields: Record<string, keyof DesktopPreferences>, field: string, value: unknown): Promise<boolean> {
     const key = Object.hasOwn(fields, field) ? fields[field] : undefined
     if (!key) return Promise.reject(new Error('Unsupported Desktop preference'))
-    return this.savePreferences({ [key]: value })
+    return this.savePreferences({ [key]: value }).then(() => true)
   }
   private async readSettings(): Promise<DesktopSettingsView> {
     const state = await this.refresh()

@@ -69,7 +69,6 @@ it('omits shipped optional and official bundles from recovery while retaining th
   manifest.dsh.profile.bundles.push(
     '@agents-anywhere/dsh-bridge-next', 'dsh-community-market', 'dshmarket',
     '@deepseek-ai/dsh-experimental-agent-team-profile',
-    '@deepseek-ai/dsh-experimental-agent-team-web-profile',
     '@deepseek-ai/future-official-plugin',
     'third-party-plugin', '@community/example', 'third-party-plugin',
   )

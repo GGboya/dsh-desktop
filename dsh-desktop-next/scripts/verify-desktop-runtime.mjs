@@ -65,7 +65,9 @@ try {
   assert.ok(new URL(links.localUrl).searchParams.get('token'))
   const login = await fetch(runtime.resolveBrowserLink(links.localUrl), { redirect: 'manual' })
   assert.equal(login.status, 303, 'Enabled browser access exchanges the login token through the real Host')
-  assert.equal(login.headers.get('location'), '/')
+  // dsh 0.1.7 redirects the token exchange to the directory-relative `./` so a mounted
+  // Host keeps its prefix (`packages/client/connection/src/browser-auth.ts:256`).
+  assert.equal(login.headers.get('location'), './')
   const browserCookie = login.headers.get('set-cookie')?.split(';')[0]
   assert.ok(browserCookie)
   await login.body?.cancel()

@@ -33,7 +33,7 @@ export async function main(): Promise<void> {
   ])
   const application = runProfile({
     environment: loadLayeredEnv('dsh-desktop-next'), profile: basename(projectDir),
-    resolutionMode: 'runtime', resolvedProfile: { profile, installAnchor: NEXT_PACKAGE },
+    resolvedProfile: { profile, installAnchor: NEXT_PACKAGE },
     patchFiles: [join(runtimeDir, 'host.cordis.patch.yml'), join(projectDir, 'desktop-next.cordis.patch.json'), runtimePatch], args: ['--no-open', '--port', String(preferences.port)],
     packageManager: {
       command: process.execPath, args: ['--expose-internals', bundledPnpmEntry(NEXT_PACKAGE), ...withDesktopPnpmPolicy([])],
@@ -57,6 +57,18 @@ export async function main(): Promise<void> {
   })()
   process.on('message', (value: unknown) => {
     if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'shutdown') void stop().catch(fatal)
+    if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'injections') {
+      // dsh 0.1.7 serves the boot graph as revision-addressed combo bundles, and registering a
+      // plugin rebuilds that table. A document reloading against the table captured at startup
+      // would request bundles the Web server no longer publishes, so the answer is collected now.
+      const query = value as { requestId?: unknown }
+      if (!Number.isSafeInteger(query.requestId)) return
+      void application.then(async ({ ctx }) => {
+        if (stopping) throw new Error('Next Host is stopping')
+        await send({ type: 'injections', requestId: query.requestId, injections: ctx.webServer.collectIndexInjections() })
+      }).catch(async () => { await send({ type: 'injections', requestId: query.requestId, error: 'Could not collect Web boot injections' }) }).catch(fatal)
+      return
+    }
     if (typeof value !== 'object' || value === null || !('type' in value) || value.type !== 'browser-access') return
     const request = value as { requestId?: unknown; enabled?: unknown }
     if (!Number.isSafeInteger(request.requestId) || typeof request.enabled !== 'boolean') return

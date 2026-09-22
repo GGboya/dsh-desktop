@@ -1,6 +1,6 @@
 /** One official-component dialog for every native permission entry point. */
 import { useEffect, useRef, useState } from 'react'
-import { Button, IconSettingsOutline16, Modal, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconSettingsOutlineRegular, Modal, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DesktopPermission, DesktopPermissionSnapshot, DesktopPermissions } from '../permissions.ts'
 
 export function DesktopPermissionsSection({ service, language }: { service: DesktopPermissions; language: string }) {
@@ -17,7 +17,7 @@ export function DesktopPermissionsButton({ service, language, iconOnly = false, 
   const label = zh ? '授权设置' : 'Permissions'
   return <>
     <Button variant={iconOnly ? 'ghost' : 'outline'} size="sm" aria-label={label} title={label} disabled={disabled}
-      className={iconOnly ? 'dshNextSettingsGear' : undefined} icon={iconOnly ? <IconSettingsOutline16 /> : undefined}
+      className={iconOnly ? 'dshNextSettingsGear' : undefined} icon={iconOnly ? <IconSettingsOutlineRegular /> : undefined}
       onClick={() => { setOpen(true) }}>{iconOnly ? null : label}</Button>
     <DesktopPermissionsDialog open={open} onClose={() => { setOpen(false) }} service={service} language={language} />
   </>

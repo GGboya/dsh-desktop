@@ -4,8 +4,14 @@ import { dirname, join, relative } from 'node:path'
 
 interface PackContext { appOutDir: string; electronPlatformName: string }
 export function verifyNextPayload(root: string): void {
+  // `host.cordis.patch.yml` and `scripts/node-bin` are read from the packaged application by the
+  // Host: the overlay swaps the official webserver for Next's private loopback one, and the shims
+  // put a `node` on the package manager's PATH. Both are invisible to a `yarn start` run, which
+  // resolves them in the source tree, so only this check keeps them in the payload.
   for (const path of ['lib/main.js', 'lib/host.js', 'lib/client.js', 'lib/preload-app.cjs', 'lib/preload-shell.cjs',
-    'lib/native-ui/index.html', 'cordis.patch.yml', 'assets/tray-iconTemplate.png', 'assets/tray-icon-blue.png']) {
+    'lib/native-ui/index.html', 'cordis.patch.yml', 'host.cordis.patch.yml',
+    'scripts/node-bin/node', 'scripts/node-bin/node.cmd',
+    'assets/tray-iconTemplate.png', 'assets/tray-icon-blue.png']) {
     if (!existsSync(join(root, path))) throw new Error(`Missing Next payload: ${path}`)
   }
   const queued = [join(root, 'package.json')]; const visited = new Set<string>()
@@ -14,7 +20,14 @@ export function verifyNextPayload(root: string): void {
     if (visited.has(manifest)) continue
     visited.add(manifest)
     const data = JSON.parse(readFileSync(manifest, 'utf8'))
-    for (const name of Object.keys(data.dependencies ?? {})) {
+    // Required peers are runtime edges too: a plugin whose peer is absent throws on import and the
+    // Host reports it as an entry that did not activate, long after packaging reported success.
+    // They are the packages most easily missed, because the workspace resolves them from the
+    // repository root even when this application never declares them.
+    const optionalPeers = data.peerDependenciesMeta ?? {}
+    const required = [...Object.keys(data.dependencies ?? {}),
+      ...Object.keys(data.peerDependencies ?? {}).filter(name => optionalPeers[name]?.optional !== true)]
+    for (const name of required) {
       let parent = dirname(manifest)
       let found: string | undefined
       while (!relative(root, parent).startsWith('..')) {

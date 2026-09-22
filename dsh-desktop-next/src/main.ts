@@ -26,7 +26,7 @@ import { ONBOARDING_ARGUMENT, RECOVERY_ARGUMENT, SAFE_ARGUMENT, relaunchArgument
 import { createNativePermissions, installMediaPermissions } from './electron-permissions.ts'
 import { readDataDirectory, validateDataDirectory } from './data-directory.ts'
 import { maskSecrets } from './mask-secrets.ts'
-import { NativeSidebarBrowser } from './sidebar-browser.ts'
+import { DesktopBrowserGuests } from './browser-guests.ts'
 import { NextUpdates } from './updates.ts'
 import { NextUpdateInstaller } from './update-installer.ts'
 import { updateLabel } from './update-state.ts'
@@ -46,7 +46,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'dsh-app', privileges: {
 } }])
 
 let mainWindow: BrowserWindow | undefined
-let sidebarBrowser: NativeSidebarBrowser | undefined
+// Storage partitions outlive individual windows, so the guest owner is process-scoped.
+const browserGuests = new DesktopBrowserGuests(() => runtime.auth ? [new URL(runtime.auth.url).origin] : [])
 let shellWindow: BrowserWindow | undefined
 let recoveryRunner: ReturnType<typeof createPackageRunner> | undefined
 let replacingWindow = false
@@ -152,7 +153,9 @@ function createWindow(preload: string, primary = false): BrowserWindow {
       vibrancy: runtime.preferences.macosMaterial === 'transparent' ? 'sidebar' as const : undefined,
       visualEffectState: 'active' as const, backgroundColor: '#00000000',
     } : {}),
-    webPreferences: { preload: join(root, 'lib', preload), contextIsolation: true, sandbox: true, nodeIntegration: false },
+    // `webviewTag` only on the application document: every attachment is still refused unless
+    // `DesktopBrowserGuests` issued the lease, and the guest itself never gets the tag.
+    webPreferences: { preload: join(root, 'lib', preload), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: primary },
   })
   window.once('ready-to-show', () => show(window))
   if (primary) {
@@ -226,15 +229,9 @@ function openMain(): void {
   if (mainWindow && !mainWindow.isDestroyed()) { show(mainWindow); return }
   mainWindow = createWindow('preload-app.cjs', true)
   const owner = mainWindow
-  const browser = new NativeSidebarBrowser(owner, state => {
-    if (!owner.webContents.isDestroyed()) owner.webContents.send(IPC.sidebarBrowserState, state)
-  }, () => runtime.auth ? [new URL(runtime.auth.url).origin] : [])
-  sidebarBrowser = browser
-  owner.webContents.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => {
-    if (isMainFrame && !inPlace) browser.dispose()
-  })
-  owner.webContents.on('render-process-gone', () => browser.dispose())
-  mainWindow.on('closed', () => { browser.dispose(); sidebarBrowser = undefined; mainWindow = undefined })
+  // The guest owner installs its own navigation, crash and destruction release paths.
+  browserGuests.bind(owner)
+  mainWindow.on('closed', () => { mainWindow = undefined })
   mainWindow.webContents.on('render-process-gone', (_event, details) => { if (!quitting) runtime.report(new Error(`Renderer: ${details.reason}`)) })
   mainWindow.webContents.on('preload-error', (_event, _path, error) => runtime.report(error))
   mainWindow.webContents.on('did-fail-load', (_event, code, message, _url, isMain) => {
@@ -259,9 +256,40 @@ async function reloadMain(): Promise<void> {
   if (existing && existing === mainWindow && !existing.isDestroyed()) await loadMainDocument(existing)
 }
 
+/**
+ * Raise the window a modal dialog must belong to, and return it as its owner.
+ *
+ * Electron's `dialog.*` overloads that take no `BrowserWindow` open an unowned
+ * top-level window. On Windows that window disables nothing and is ordered
+ * against every other top-level window, so one click on the app sends the
+ * prompt behind it leaving no taskbar hint and no visual trace. Every recovery
+ * action waits on `confirmed()` before it touches a single file, so an occluded
+ * prompt is indistinguishable from an action that hung forever: no file change,
+ * no diagnostic line, no error, and no timeout to end it. Owning the dialog
+ * makes it window-modal, which is what the recovery UI's own busy state already
+ * promises the user.
+ *
+ * Recovery, safe mode and onboarding all run in `shellWindow` while
+ * `mainWindow` is destroyed, and `shellWindow` is only open while the user is
+ * looking at it, so preferring it puts the prompt on the surface that raised it.
+ *
+ * @returns the owning window, or `undefined` when no window is alive and an
+ *   unowned dialog is the only thing left.
+ */
+function raiseDialogOwner(): BrowserWindow | undefined {
+  for (const window of [shellWindow, mainWindow]) {
+    if (window === undefined || window.isDestroyed()) continue
+    show(window)
+    return window
+  }
+  return undefined
+}
+
 async function confirmed(message: string, detail = t('将停止当前 Host，正在运行的任务会被中断。', 'This stops the current Host and interrupts running tasks.')): Promise<boolean> {
-  const result = await dialog.showMessageBox({ type: 'question', title: 'DSH NEXT', message, detail,
-    buttons: [t('继续', 'Continue'), t('取消', 'Cancel')], defaultId: 1, cancelId: 1 })
+  const owner = raiseDialogOwner()
+  const options = { type: 'question' as const, title: 'DSH NEXT', message, detail,
+    buttons: [t('继续', 'Continue'), t('取消', 'Cancel')], defaultId: 1, cancelId: 1 }
+  const result = await (owner === undefined ? dialog.showMessageBox(options) : dialog.showMessageBox(owner, options))
   return result.response === 0 && !quitting
 }
 async function openPath(path: string): Promise<void> { const error = await shell.openPath(path); if (error) throw new Error(error) }
@@ -370,9 +398,11 @@ async function command(value: unknown, source: 'app' | 'shell' | 'native' = 'app
     if (type === 'export-ca' || type === 'diagnostics') {
       const certificate = runtime.lan?.caCertificate
       if (type === 'export-ca' && !certificate) throw new Error('LAN certificate is unavailable')
-      const result = await dialog.showSaveDialog({ title: type === 'export-ca' ? t('导出局域网 CA 证书', 'Export LAN CA certificate') : t('导出诊断（分享前请检查内容）', 'Export diagnostics (review before sharing)'),
+      const owner = raiseDialogOwner()
+      const options = { title: type === 'export-ca' ? t('导出局域网 CA 证书', 'Export LAN CA certificate') : t('导出诊断（分享前请检查内容）', 'Export diagnostics (review before sharing)'),
         defaultPath: type === 'export-ca' ? 'dsh-desktop-next-ca.crt' : `dsh-desktop-next-diagnostics-${Date.now()}.json`,
-        filters: [{ name: type === 'export-ca' ? 'CA certificate' : 'Diagnostics', extensions: [type === 'export-ca' ? 'crt' : 'json'] }] })
+        filters: [{ name: type === 'export-ca' ? 'CA certificate' : 'Diagnostics', extensions: [type === 'export-ca' ? 'crt' : 'json'] }] }
+      const result = await (owner === undefined ? dialog.showSaveDialog(options) : dialog.showSaveDialog(owner, options))
       if (!result.canceled && result.filePath && !quitting) {
         await writeFile(result.filePath, type === 'export-ca' ? certificate! : runtime.diagnostics.export(state()), { mode: 0o600 })
         if (type === 'diagnostics') diagnosticsFile = result.filePath
@@ -539,7 +569,11 @@ async function recoveryAction(input: Record<string, unknown>): Promise<void> {
     return
   }
   if (action === 'begin-change-data-directory' || action === 'restore-default-data-directory') {
-    const choice = action === 'begin-change-data-directory' ? await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }) : undefined
+    const owner = action === 'begin-change-data-directory' ? raiseDialogOwner() : undefined
+    const choice = action !== 'begin-change-data-directory' ? undefined
+      : await (owner === undefined
+        ? dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+        : dialog.showOpenDialog(owner, { properties: ['openDirectory', 'createDirectory'] }))
     if (choice?.canceled) return
     const target = action === 'restore-default-data-directory' ? defaultHome : choice?.filePaths[0]
     if (!target || !isAbsolute(target)) return
@@ -588,7 +622,7 @@ async function main(): Promise<void> {
     assertSender(event, mainWindow, APP_URL)
     await runtime.startup
     if (!runtime.backend.host || !runtime.auth) throw new Error('Next Host is unavailable')
-    return { injections: runtime.auth.injections, streamBaseUrl: new URL(runtime.auth.url).origin }
+    return { injections: await runtime.injections(), streamBaseUrl: new URL(runtime.auth.url).origin }
   })
   ipcMain.handle(IPC.failed, (event, message: unknown) => {
     assertSender(event, mainWindow, APP_URL)
@@ -603,10 +637,14 @@ async function main(): Promise<void> {
     return page
   })
   ipcMain.handle(IPC.browserLinks, event => { assertDesktopSender(event); return runtime.browserLinks() })
-  ipcMain.handle(IPC.sidebarBrowser, (event, command: unknown) => {
+  ipcMain.handle(IPC.browserAcquire, (event, workspace: unknown) => {
     assertSender(event, mainWindow, APP_URL)
-    if (quitting || !sidebarBrowser) throw new Error('Desktop browser is unavailable')
-    return sidebarBrowser.command(command)
+    if (quitting) throw new Error('Desktop browser is unavailable')
+    return browserGuests.acquire(event.sender, workspace)
+  })
+  ipcMain.handle(IPC.browserRelease, (event, lease: unknown) => {
+    assertSender(event, mainWindow, APP_URL)
+    return browserGuests.release(event.sender, lease)
   })
   ipcMain.handle(IPC.permissionQuery, (event, permission: unknown) => { assertDesktopSender(event); return permissions.query(permission) })
   const permissionGesture = async (event: IpcMainInvokeEvent): Promise<void> => {

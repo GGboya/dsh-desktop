@@ -47,6 +47,11 @@ html[data-platform='darwin'] [data-plugin-sidebar-control] [data-sidebar-header-
 /* These controls remain clickable even when scrolled into the caption region. */
 html[data-platform='darwin'] [data-plugin-panel] :is(button, a, input, textarea, select, label, summary, [contenteditable='true'], [role='button'], [role='switch'], [role='radio'], [role='checkbox'], [role='tab'], [role='menuitem'], [role='slider']),
 html[data-platform='darwin'] [data-plugin-sidebar-control] { -webkit-app-region: no-drag; }
+/* dsh 0.1.7 moved its own drag band onto the AppFrame seat and dropped the
+   conversation title row's caption region, so Desktop restates it here. The
+   official rules for the leading/actions/utilities/corner clusters still ship. */
+html[data-platform='darwin'] [data-conversation-title-row] { -webkit-app-region: drag; }
+html[data-platform='darwin'] [data-conversation-title-row] :is(button, a) { -webkit-app-region: no-drag; }
 /* A modal or full-screen right pane owns its own input surface. */
 html:has([aria-modal='true']) [data-conversation-title-row],
 html:has([aria-modal='true']) :has(> [data-shell-overlay]) > :has([data-plugin-panel])::before,

@@ -119,6 +119,23 @@ export class NextDesktopRuntime {
     this.options.onChange()
   }
 
+  /**
+   * Boot rows for a document that is loading now.
+   * @returns The Host's current Web boot table, or the table captured at startup when the running
+   * Host cannot answer. dsh 0.1.7 addresses boot bundles by revision and republishes the table
+   * whenever a plugin registers, so replaying the startup table breaks every reload that follows
+   * a plugin installation.
+   */
+  async injections(): Promise<readonly unknown[]> {
+    const auth = this.auth
+    if (!auth) throw new Error('Next Host is unavailable')
+    try { return await (this.hostProcess?.collectInjections() ?? Promise.resolve(auth.injections)) }
+    catch (error) {
+      this.diagnostics.append(`Web boot injections: ${String(error)}`, 'warn')
+      return auth.injections
+    }
+  }
+
   /** Apply access toggles without stopping conversations or changing the renderer capability. */
   async applyPreferences(value: unknown): Promise<void> {
     const next = parsePreferences(value)
@@ -229,7 +246,7 @@ export class NextDesktopRuntime {
       { ...process.env, DSH_HOME: actualHome, DSH_NEXT_NATIVE_TOKEN: token,
         DSH_NEXT_PREFERENCES: JSON.stringify(effective), DSH_NEXT_TRUSTED_HOSTS: JSON.stringify(addresses),
         ...(this.safeMode ? { DSH_TELEMETRY_DISABLED: '1' } : {}) },
-      onFailure, undefined, 'runtime', undefined, join(options.root, 'lib', 'host.js'), options.onRestart, options.onNotification,
+      onFailure, undefined, undefined, join(options.root, 'lib', 'host.js'), options.onRestart, options.onNotification,
       chunk => this.diagnostics.hostChunk(chunk), options.onTerminal, options.onPermission)
     this.hostProcess = host
     return {

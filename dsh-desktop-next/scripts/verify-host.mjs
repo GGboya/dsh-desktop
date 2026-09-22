@@ -1,4 +1,4 @@
-/** Exercise the actual alpha.2 Host, credentials, Market routes and AA manifest without Electron UI. */
+/** Exercise the actual 0.1.7-alpha.1 Host, credentials, Market routes and AA manifest without Electron UI. */
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -26,7 +26,7 @@ const pnpmInvocation = { command: executable, args: ['--expose-internals', bundl
 } }
 async function boot(name) {
   host = new DesktopHostProcess(executable, root, manager.directory(name), undefined,
-    { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, undefined, undefined, 'runtime', undefined,
+    { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, undefined, undefined, undefined,
     join(root, 'lib', 'host.js'), () => { restartRequests++ })
   let timer
   const ready = await Promise.race([
@@ -56,7 +56,7 @@ try {
   runner = createPackageRunner(pnpmInvocation, dir)
   const { createDesktopPluginRuntime } = await import(new URL('./lib/dsh-cli.js', pathToFileURL(createRequire(import.meta.url).resolve('dshmarket/package.json'))))
   const marketRuntime = createDesktopPluginRuntime(runner, dir, home)
-  const installed = await marketRuntime.runPlugin('desktop', ['add', '--offline', '--ignore-scripts', `file:${fixture}`])
+  const installed = await marketRuntime.runPlugin('desktop', ['add', '--offline', '--ignore-scripts', `file:${fixture.replaceAll('\\', '/')}`])
   assert.equal(installed.exitCode, 0, JSON.stringify(installed))
   const install = runner.run(['list'])
   let output = ''
@@ -79,9 +79,9 @@ try {
   // The official overview discovers installation-owned bundles from direct
   // dependencies, even when their packages are already present transitively.
   const availableBundles = await rpc('listBundles')
-  for (const [name, rowId] of [
-    ['@deepseek-ai/dsh-experimental-agent-team-profile', 'agent-team'],
-    ['@deepseek-ai/dsh-experimental-agent-team-web-profile', 'ui-agent-team'],
+  // dsh 0.1.7 deleted `-web-profile` and merged its `ui-agent-team` row into `-profile`.
+  for (const [name, rowIds] of [
+    ['@deepseek-ai/dsh-experimental-agent-team-profile', ['agent-team', 'ui-agent-team']],
   ]) {
     const bundle = availableBundles.find(row => row.name === name)
     assert.ok(bundle, `Official Plugins overview must offer ${name}`)
@@ -89,7 +89,7 @@ try {
     assert.equal(bundle.enabled, false, 'Team bundles must remain opt-in')
     assert.equal(bundle.removable, false)
     assert.equal(bundle.error, undefined)
-    assert.ok(bundle.rows.some(row => row.rowId === rowId), JSON.stringify(bundle))
+    for (const rowId of rowIds) assert.ok(bundle.rows.some(row => row.rowId === rowId), JSON.stringify(bundle))
   }
   const packages = ['dsh-community-market', 'dshmarket', '@agents-anywhere/dsh-bridge-next']
   for (const name of packages) {
@@ -289,7 +289,7 @@ try {
     await stop()
     console.log('Onboarding Cua native provider activation and teardown passed without capturing screens, sending input or prompting for OS permissions.')
   }
-  console.log(`Next Host smoke passed (${process.argv.includes('--electron') ? 'Electron Node mode' : 'Node'}): authenticated alpha.2 Web, exclusive market selection and independent AA persisted, official row toggles, dshmarket offline install and cross-market removal, official install/remove with a freshly published locked dependency, native dshmarket update origin gate, graceful shutdown, recovery boot and profile switch.`)
+  console.log(`Next Host smoke passed (${process.argv.includes('--electron') ? 'Electron Node mode' : 'Node'}): authenticated 0.1.7-alpha.1 Web, exclusive market selection and independent AA persisted, official row toggles, dshmarket offline install and cross-market removal, official install/remove with a freshly published locked dependency, native dshmarket update origin gate, graceful shutdown, recovery boot and profile switch.`)
 } finally {
   await runner?.dispose()
   await host?.stop()
